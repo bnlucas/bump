@@ -3,11 +3,23 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Profile } from "@/lib/profile";
+import type { ConsentDto, ConsentLayerDto } from "@/lib/consents";
 
-export function ProfileEditor({ initial }: { initial: Profile }) {
+export function ProfileEditor({
+  initial,
+  initialConsents,
+  consentLayers,
+}: {
+  initial: Profile;
+  initialConsents: ConsentDto[];
+  consentLayers: ConsentLayerDto[];
+}) {
   const router = useRouter();
   const [displayName, setDisplayName] = useState(initial.display_name ?? "");
   const [bio, setBio] = useState(initial.bio ?? "");
+  const [consents, setConsents] = useState(initialConsents);
+  const [consentBusy, setConsentBusy] = useState<string | null>(null);
+  const [consentError, setConsentError] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [saving, startSave] = useTransition();
@@ -44,6 +56,40 @@ export function ProfileEditor({ initial }: { initial: Profile }) {
       router.replace("/auth");
       router.refresh();
     });
+  }
+
+  async function toggleConsent(layer: ConsentLayerDto, grant: ConsentDto | undefined) {
+    setConsentError(null);
+    setConsentBusy(layer.key);
+    try {
+      if (grant) {
+        const res = await fetch(`/api/profile/consents/${encodeURIComponent(grant.id)}`, {
+          method: "DELETE",
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setConsentError(data?.error ?? `Revoke failed (${res.status}).`);
+          return;
+        }
+        setConsents((cs) => cs.filter((c) => c.id !== grant.id));
+      } else {
+        const res = await fetch("/api/profile/consents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ consent_type: layer.key }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setConsentError(data?.error ?? `Grant failed (${res.status}).`);
+          return;
+        }
+        const data = (await res.json()) as { consent: ConsentDto };
+        setConsents((cs) => [...cs, data.consent]);
+      }
+      router.refresh();
+    } finally {
+      setConsentBusy(null);
+    }
   }
 
   return (
@@ -88,6 +134,64 @@ export function ProfileEditor({ initial }: { initial: Profile }) {
           {saving ? "Saving…" : "Save"}
         </button>
       </form>
+
+      <hr className="border-[color:var(--border)]" />
+
+      <div>
+        <h2 className="mb-1 text-sm font-semibold">Consent</h2>
+        <p className="mb-3 text-xs text-[color:var(--muted-foreground)]">
+          Each consent layer is a context (e.g. dating, friendship) for which
+          you allow Simbee to compute matches and let others reach out.
+        </p>
+        {consentLayers.length === 0 ? (
+          <p className="text-sm text-[color:var(--muted-foreground)]">
+            No consent layers configured for this tenant.
+          </p>
+        ) : (
+          <ul className="divide-y divide-[color:var(--border)] rounded-2xl border border-[color:var(--border)]">
+            {consentLayers.map((layer) => {
+              const grant = consents.find((c) => c.consent_type === layer.key);
+              const granted = Boolean(grant);
+              return (
+                <li
+                  key={layer.id}
+                  className="flex items-center justify-between gap-3 px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium">{layer.key}</p>
+                    {grant ? (
+                      <p className="font-mono text-[10px] text-[color:var(--muted-foreground)]">
+                        granted {new Date(grant.granted_at).toLocaleDateString()}
+                      </p>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={consentBusy === layer.key}
+                    onClick={() => toggleConsent(layer, grant)}
+                    className={
+                      granted
+                        ? "rounded-full border border-[color:var(--border)] px-4 py-1.5 text-xs font-medium text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] disabled:opacity-50"
+                        : "rounded-full bg-[color:var(--accent)] px-4 py-1.5 text-xs font-semibold text-[color:var(--accent-foreground)] disabled:opacity-50"
+                    }
+                  >
+                    {consentBusy === layer.key
+                      ? "…"
+                      : granted
+                        ? "Revoke"
+                        : "Grant"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {consentError ? (
+          <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+            {consentError}
+          </p>
+        ) : null}
+      </div>
 
       <hr className="border-[color:var(--border)]" />
 
