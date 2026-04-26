@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { PostView } from "@/lib/posts";
+import type { PostView, CommentView } from "@/lib/posts";
 import { cn } from "@/lib/cn";
 
 export function CommunityFeed({
@@ -20,11 +20,6 @@ export function CommunityFeed({
   const [body, setBody] = useState("");
   const [composeError, setComposeError] = useState<string | null>(null);
   const [submitting, startSubmit] = useTransition();
-
-  // Per-card local state: vocab post id -> engagement id (when liked this session).
-  const [likedByPost, setLikedByPost] = useState<Map<string, string>>(() => new Map());
-  const [likeBusy, setLikeBusy] = useState<string | null>(null);
-  const [likeDelta, setLikeDelta] = useState<Map<string, number>>(() => new Map());
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -51,48 +46,6 @@ export function CommunityFeed({
       setComposeOpen(false);
       router.refresh();
     });
-  }
-
-  async function toggleLike(post: PostView) {
-    setLikeBusy(post.id);
-    try {
-      const liked = likedByPost.get(post.id);
-      if (liked) {
-        const res = await fetch(
-          `/api/communities/posts/${encodeURIComponent(post.id)}/like/${encodeURIComponent(liked)}`,
-          { method: "DELETE" },
-        );
-        if (!res.ok) return;
-        setLikedByPost((m) => {
-          const next = new Map(m);
-          next.delete(post.id);
-          return next;
-        });
-        setLikeDelta((d) => {
-          const next = new Map(d);
-          next.set(post.id, (next.get(post.id) ?? 0) - 1);
-          return next;
-        });
-      } else {
-        const res = await fetch(`/api/communities/posts/${encodeURIComponent(post.id)}/like`, {
-          method: "POST",
-        });
-        if (!res.ok) return;
-        const data = (await res.json()) as { engagement_id: string };
-        setLikedByPost((m) => {
-          const next = new Map(m);
-          next.set(post.id, data.engagement_id);
-          return next;
-        });
-        setLikeDelta((d) => {
-          const next = new Map(d);
-          next.set(post.id, (next.get(post.id) ?? 0) + 1);
-          return next;
-        });
-      }
-    } finally {
-      setLikeBusy(null);
-    }
   }
 
   return (
@@ -159,45 +112,189 @@ export function CommunityFeed({
         </div>
       ) : (
         <ul className="space-y-3">
-          {posts.map((p) => {
-            const liked = likedByPost.has(p.id);
-            const count = p.engagements_count + (likeDelta.get(p.id) ?? 0);
-            return (
-              <li
-                key={p.id}
-                className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--background)] p-4 shadow-sm"
-              >
-                <p className="text-xs text-[color:var(--muted-foreground)]">
-                  {p.author_name ?? "Someone"}
-                  {p.published_at
-                    ? ` · ${new Date(p.published_at).toLocaleDateString()}`
-                    : null}
-                </p>
-                <h2 className="mt-1 text-base font-semibold tracking-tight">
-                  {p.title}
-                </h2>
-                <p className="mt-2 whitespace-pre-line text-sm">{p.body}</p>
-                <div className="mt-3 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => toggleLike(p)}
-                    disabled={likeBusy === p.id}
-                    aria-pressed={liked}
-                    className={cn(
-                      "rounded-full border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50",
-                      liked
-                        ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-[color:var(--accent-foreground)]"
-                        : "border-[color:var(--border)] text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]",
-                    )}
-                  >
-                    {liked ? "♥" : "♡"} {Math.max(count, 0)}
-                  </button>
-                </div>
-              </li>
-            );
-          })}
+          {posts.map((p) => (
+            <PostCard key={p.id} post={p} />
+          ))}
         </ul>
       )}
     </section>
+  );
+}
+
+function PostCard({ post }: { post: PostView }) {
+  const [likedEngagementId, setLikedEngagementId] = useState<string | null>(null);
+  const [likeDelta, setLikeDelta] = useState(0);
+  const [likeBusy, setLikeBusy] = useState(false);
+
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [comments, setComments] = useState<CommentView[]>([]);
+  const [commentsLoaded, setCommentsLoaded] = useState(false);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [commentSending, setCommentSending] = useState(false);
+  const [commentError, setCommentError] = useState<string | null>(null);
+
+  const liked = likedEngagementId !== null;
+  const count = post.engagements_count + likeDelta;
+
+  async function toggleLike() {
+    setLikeBusy(true);
+    try {
+      if (likedEngagementId) {
+        const res = await fetch(
+          `/api/communities/posts/${encodeURIComponent(post.id)}/like/${encodeURIComponent(likedEngagementId)}`,
+          { method: "DELETE" },
+        );
+        if (!res.ok) return;
+        setLikedEngagementId(null);
+        setLikeDelta((d) => d - 1);
+      } else {
+        const res = await fetch(
+          `/api/communities/posts/${encodeURIComponent(post.id)}/like`,
+          { method: "POST" },
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as { engagement_id: string };
+        setLikedEngagementId(data.engagement_id);
+        setLikeDelta((d) => d + 1);
+      }
+    } finally {
+      setLikeBusy(false);
+    }
+  }
+
+  async function openComments() {
+    if (commentsOpen) {
+      setCommentsOpen(false);
+      return;
+    }
+    setCommentsOpen(true);
+    if (commentsLoaded) return;
+    setCommentsLoading(true);
+    try {
+      const res = await fetch(
+        `/api/communities/comments?post=${encodeURIComponent(post.external_id)}`,
+      );
+      if (res.ok) {
+        const data = (await res.json()) as { comments: CommentView[] };
+        setComments(data.comments);
+      }
+      setCommentsLoaded(true);
+    } finally {
+      setCommentsLoading(false);
+    }
+  }
+
+  async function submitComment(e: React.FormEvent) {
+    e.preventDefault();
+    setCommentError(null);
+    const text = commentText.trim();
+    if (!text || commentSending) return;
+    setCommentSending(true);
+    try {
+      const res = await fetch("/api/communities/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          post_external_id: post.external_id,
+          body: text,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setCommentError(data?.error ?? `Couldn't post (${res.status}).`);
+        return;
+      }
+      const data = (await res.json()) as { comment: CommentView };
+      setComments((cs) => [...cs, data.comment]);
+      setCommentText("");
+    } finally {
+      setCommentSending(false);
+    }
+  }
+
+  return (
+    <li className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--background)] p-4 shadow-sm">
+      <p className="text-xs text-[color:var(--muted-foreground)]">
+        {post.author_name ?? "Someone"}
+        {post.published_at
+          ? ` · ${new Date(post.published_at).toLocaleDateString()}`
+          : null}
+      </p>
+      <h2 className="mt-1 text-base font-semibold tracking-tight">{post.title}</h2>
+      <p className="mt-2 whitespace-pre-line text-sm">{post.body}</p>
+
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={toggleLike}
+          disabled={likeBusy}
+          aria-pressed={liked}
+          className={cn(
+            "rounded-full border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50",
+            liked
+              ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-[color:var(--accent-foreground)]"
+              : "border-[color:var(--border)] text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]",
+          )}
+        >
+          {liked ? "♥" : "♡"} {Math.max(count, 0)}
+        </button>
+        <button
+          type="button"
+          onClick={openComments}
+          className="rounded-full border border-[color:var(--border)] px-3 py-1 text-xs font-medium text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
+        >
+          {commentsOpen ? "Hide replies" : "Replies"}
+          {comments.length > 0 ? ` (${comments.length})` : null}
+        </button>
+      </div>
+
+      {commentsOpen ? (
+        <div className="mt-3 space-y-3 border-t border-[color:var(--border)] pt-3">
+          {commentsLoading ? (
+            <p className="text-xs text-[color:var(--muted-foreground)]">Loading…</p>
+          ) : comments.length === 0 ? (
+            <p className="text-xs text-[color:var(--muted-foreground)]">
+              No replies yet.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {comments.map((c) => (
+                <li key={c.id} className="rounded-xl bg-[color:var(--muted)] px-3 py-2">
+                  <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                    {c.author_name ?? "Someone"} ·{" "}
+                    {new Date(c.created_at).toLocaleString()}
+                  </p>
+                  <p className="mt-1 whitespace-pre-line text-sm">{c.body}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <form onSubmit={submitComment} className="space-y-2">
+            <textarea
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              placeholder="Add a reply"
+              rows={2}
+              maxLength={2000}
+              className="w-full resize-none rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm outline-none focus:border-[color:var(--accent)]"
+            />
+            {commentError ? (
+              <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+                {commentError}
+              </p>
+            ) : null}
+            <button
+              type="submit"
+              disabled={!commentText.trim() || commentSending}
+              className="rounded-full bg-[color:var(--accent)] px-4 py-1.5 text-xs font-semibold text-[color:var(--accent-foreground)] disabled:opacity-50"
+            >
+              {commentSending ? "Posting…" : "Reply"}
+            </button>
+          </form>
+        </div>
+      ) : null}
+    </li>
   );
 }

@@ -5,6 +5,7 @@ import { shroudb } from "./shroudb";
 import { sigil, SIGIL_USER_SCHEMA } from "./sigil";
 
 const POSTS_NAMESPACE = process.env.SHROUDB_POSTS_NAMESPACE ?? "posts";
+const COMMENTS_NAMESPACE = process.env.SHROUDB_COMMENTS_NAMESPACE ?? "comments";
 const POST_CONTENT_TYPE = "post";
 const POST_VISIBILITY = "public";
 const SIGNAL_KEY_LIKE = process.env.SIMBEE_SIGNAL_KEY_LIKE ?? "like";
@@ -36,17 +37,17 @@ interface Envelope<T> {
   data: T;
 }
 
-let namespaceEnsured = false;
+const namespacesEnsured = new Set<string>();
 
-async function ensurePostsNamespace(): Promise<void> {
-  if (namespaceEnsured) return;
+async function ensureNamespace(name: string): Promise<void> {
+  if (namespacesEnsured.has(name)) return;
   try {
-    await shroudb().shroudb.namespaceCreate(POSTS_NAMESPACE);
+    await shroudb().shroudb.namespaceCreate(name);
   } catch {
-    // Already exists or permission-denied — both are fine for our purposes;
-    // the next put() will surface a real error if storage is broken.
+    // Already exists or permission-denied — both fine; next put() will
+    // surface a real error if storage is actually broken.
   }
-  namespaceEnsured = true;
+  namespacesEnsured.add(name);
 }
 
 interface StoredBody {
@@ -116,7 +117,7 @@ export async function createPost(
 ): Promise<PostView | null> {
   const externalId = randomUUID();
 
-  await ensurePostsNamespace();
+  await ensureNamespace(POSTS_NAMESPACE);
   await shroudb().shroudb.put(
     POSTS_NAMESPACE,
     externalId,
@@ -176,3 +177,111 @@ export async function removeLike(
   return res.ok;
 }
 
+
+export interface CommentView {
+  id: string;
+  parent_external_id: string;
+  body: string;
+  author_external_id: string;
+  author_name: string | null;
+  created_at: string;
+}
+
+interface StoredComment {
+  body: string;
+  author_external_id: string;
+  parent_external_id: string;
+  created_at: string;
+}
+
+function commentKey(parentExternalId: string, commentExternalId: string): string {
+  return `${parentExternalId}/${commentExternalId}`;
+}
+
+export async function createComment(
+  authorExternalId: string,
+  parentExternalId: string,
+  body: string,
+): Promise<CommentView | null> {
+  await ensureNamespace(COMMENTS_NAMESPACE);
+  const id = randomUUID();
+  const stored: StoredComment = {
+    body,
+    author_external_id: authorExternalId,
+    parent_external_id: parentExternalId,
+    created_at: new Date().toISOString(),
+  };
+  await shroudb().shroudb.put(
+    COMMENTS_NAMESPACE,
+    commentKey(parentExternalId, id),
+    JSON.stringify(stored),
+  );
+  const author = await sigil()
+    .userGet(SIGIL_USER_SCHEMA, authorExternalId)
+    .catch(() => null);
+  const fields = (author?.fields ?? {}) as Record<string, unknown>;
+  return {
+    id,
+    parent_external_id: parentExternalId,
+    body: stored.body,
+    author_external_id: authorExternalId,
+    author_name: typeof fields.display_name === "string" ? fields.display_name : null,
+    created_at: stored.created_at,
+  };
+}
+
+export async function listComments(parentExternalId: string): Promise<CommentView[]> {
+  await ensureNamespace(COMMENTS_NAMESPACE);
+  const listing = await shroudb()
+    .shroudb.list(COMMENTS_NAMESPACE, { prefix: `${parentExternalId}/`, limit: 100 })
+    .catch(() => null);
+  if (!listing) return [];
+
+  const keys = ((listing as { keys?: unknown }).keys ?? []) as unknown[];
+  const stringKeys = keys.filter((k): k is string => typeof k === "string");
+
+  const fetched = await Promise.all(
+    stringKeys.map(async (key) => {
+      const got = await shroudb()
+        .shroudb.get(COMMENTS_NAMESPACE, key)
+        .catch(() => null);
+      if (!got || typeof (got as { value?: unknown }).value !== "string") return null;
+      try {
+        const parsed = JSON.parse((got as { value: string }).value) as StoredComment;
+        const id = key.startsWith(`${parentExternalId}/`)
+          ? key.slice(parentExternalId.length + 1)
+          : key;
+        return { id, parsed };
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  const valid = fetched.filter(
+    (x): x is { id: string; parsed: StoredComment } => x !== null,
+  );
+
+  const authors = new Map<string, string | null>();
+  await Promise.all(
+    Array.from(new Set(valid.map((v) => v.parsed.author_external_id))).map(async (ext) => {
+      const env = await sigil().userGet(SIGIL_USER_SCHEMA, ext).catch(() => null);
+      const fields = (env?.fields ?? {}) as Record<string, unknown>;
+      authors.set(
+        ext,
+        typeof fields.display_name === "string" ? fields.display_name : null,
+      );
+    }),
+  );
+
+  return valid
+    .map(({ id, parsed }) => ({
+      id,
+      parent_external_id: parsed.parent_external_id,
+      body: parsed.body,
+      author_external_id: parsed.author_external_id,
+      author_name: authors.get(parsed.author_external_id) ?? null,
+      created_at: parsed.created_at,
+    }))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+}
