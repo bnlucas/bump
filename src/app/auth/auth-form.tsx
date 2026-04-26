@@ -35,7 +35,7 @@ export function AuthForm() {
         setError(data?.error ?? `Request failed (${res.status}).`);
         return;
       }
-      router.replace("/profile");
+      router.replace(mode === "signup" ? "/onboarding" : "/discover");
       router.refresh();
     });
   }

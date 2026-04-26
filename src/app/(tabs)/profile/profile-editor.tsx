@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import type { Profile } from "@/lib/profile";
 import type { ConsentDto, ConsentLayerDto } from "@/lib/consents";
 import type { ClientTagDto, ClientTopicDto } from "@/lib/vocab";
-import type { AffinityTagDto } from "@/lib/affinity-tags";
 import type { AffinityTopicDto } from "@/lib/affinity-topics";
 import type {
   ClientAffinityPreferenceDto,
   ClientAffinityRoleDto,
 } from "@/lib/affinity-config";
-import { cn } from "@/lib/cn";
+import { PhotoGrid } from "@/components/photo-grid";
+import { ConsentList } from "@/components/consent-list";
+import { InterestChips } from "@/components/interest-chips";
 
 interface TopicEntry extends AffinityTopicDto {
   topicName: string;
@@ -41,14 +42,11 @@ export function ProfileEditor({
   const router = useRouter();
   const [displayName, setDisplayName] = useState(initial.display_name ?? "");
   const [bio, setBio] = useState(initial.bio ?? "");
-  const [consents, setConsents] = useState(initialConsents);
-  const [consentBusy, setConsentBusy] = useState<string | null>(null);
-  const [consentError, setConsentError] = useState<string | null>(null);
-  const [attachedByTagId, setAttachedByTagId] = useState<Map<string, string>>(
-    () => new Map(),
-  );
-  const [tagBusy, setTagBusy] = useState<string | null>(null);
-  const [tagError, setTagError] = useState<string | null>(null);
+  const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, startSave] = useTransition();
+  const [signingOut, startSignOut] = useTransition();
+
   const [topicEntries, setTopicEntries] = useState<TopicEntry[]>([]);
   const [topicDraft, setTopicDraft] = useState({
     topic_id: "",
@@ -59,17 +57,9 @@ export function ProfileEditor({
   });
   const [topicBusy, setTopicBusy] = useState(false);
   const [topicError, setTopicError] = useState<string | null>(null);
-  const [photoIds, setPhotoIds] = useState(initialPhotoIds);
-  const [photoBusy, setPhotoBusy] = useState<string | null>(null);
-  const [photoError, setPhotoError] = useState<string | null>(null);
-  const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
-  const [error, setError] = useState<string | null>(null);
-  const [saving, startSave] = useTransition();
-  const [signingOut, startSignOut] = useTransition();
 
   const dirty =
-    displayName !== (initial.display_name ?? "") ||
-    bio !== (initial.bio ?? "");
+    displayName !== (initial.display_name ?? "") || bio !== (initial.bio ?? "");
 
   function save(e: React.FormEvent) {
     e.preventDefault();
@@ -98,61 +88,6 @@ export function ProfileEditor({
       router.replace("/auth");
       router.refresh();
     });
-  }
-
-  async function uploadPhoto(file: File) {
-    setPhotoError(null);
-    if (!file.type.startsWith("image/")) {
-      setPhotoError("Pick an image.");
-      return;
-    }
-    setPhotoBusy("__upload__");
-    try {
-      const data_b64 = await new Promise<string>((resolve, reject) => {
-        const r = new FileReader();
-        r.onerror = () => reject(r.error);
-        r.onload = () => {
-          const out = typeof r.result === "string" ? r.result : "";
-          resolve(out);
-        };
-        r.readAsDataURL(file);
-      });
-      const res = await fetch("/api/profile/photos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data_b64, content_type: file.type }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setPhotoError(data?.error ?? `Upload failed (${res.status}).`);
-        return;
-      }
-      const data = (await res.json()) as { photo_id: string };
-      setPhotoIds((ids) => [...ids, data.photo_id]);
-      router.refresh();
-    } finally {
-      setPhotoBusy(null);
-    }
-  }
-
-  async function deletePhoto(photoId: string) {
-    setPhotoError(null);
-    setPhotoBusy(photoId);
-    try {
-      const res = await fetch(
-        `/api/profile/photos/${encodeURIComponent(photoId)}`,
-        { method: "DELETE" },
-      );
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setPhotoError(data?.error ?? `Remove failed (${res.status}).`);
-        return;
-      }
-      setPhotoIds((ids) => ids.filter((id) => id !== photoId));
-      router.refresh();
-    } finally {
-      setPhotoBusy(null);
-    }
   }
 
   async function addTopic(e: React.FormEvent) {
@@ -189,7 +124,8 @@ export function ProfileEditor({
       const topicName =
         topicVocab.find((t) => t.id === topicDraft.topic_id)?.name ?? topicDraft.topic_id;
       const preferenceKey =
-        preferences.find((p) => p.id === topicDraft.preference_id)?.key ?? topicDraft.preference_id;
+        preferences.find((p) => p.id === topicDraft.preference_id)?.key ??
+        topicDraft.preference_id;
       const roleKey = topicDraft.role_id
         ? (roles.find((r) => r.id === topicDraft.role_id)?.key ?? topicDraft.role_id)
         : undefined;
@@ -228,139 +164,9 @@ export function ProfileEditor({
     }
   }
 
-  async function toggleTag(tag: ClientTagDto) {
-    setTagError(null);
-    setTagBusy(tag.id);
-    try {
-      const attachedId = attachedByTagId.get(tag.id);
-      if (attachedId) {
-        const res = await fetch(
-          `/api/profile/affinity-tags/${encodeURIComponent(attachedId)}`,
-          { method: "DELETE" },
-        );
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          setTagError(data?.error ?? `Remove failed (${res.status}).`);
-          return;
-        }
-        setAttachedByTagId((m) => {
-          const next = new Map(m);
-          next.delete(tag.id);
-          return next;
-        });
-      } else {
-        const res = await fetch("/api/profile/affinity-tags", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tag_id: tag.id, tag_type: "client" }),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          setTagError(data?.error ?? `Add failed (${res.status}).`);
-          return;
-        }
-        const data = (await res.json()) as { tag: AffinityTagDto };
-        setAttachedByTagId((m) => {
-          const next = new Map(m);
-          next.set(tag.id, data.tag.id);
-          return next;
-        });
-      }
-    } finally {
-      setTagBusy(null);
-    }
-  }
-
-  async function toggleConsent(layer: ConsentLayerDto, grant: ConsentDto | undefined) {
-    setConsentError(null);
-    setConsentBusy(layer.key);
-    try {
-      if (grant) {
-        const res = await fetch(`/api/profile/consents/${encodeURIComponent(grant.id)}`, {
-          method: "DELETE",
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          setConsentError(data?.error ?? `Revoke failed (${res.status}).`);
-          return;
-        }
-        setConsents((cs) => cs.filter((c) => c.id !== grant.id));
-      } else {
-        const res = await fetch("/api/profile/consents", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ consent_type: layer.key }),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          setConsentError(data?.error ?? `Grant failed (${res.status}).`);
-          return;
-        }
-        const data = (await res.json()) as { consent: ConsentDto };
-        setConsents((cs) => [...cs, data.consent]);
-      }
-      router.refresh();
-    } finally {
-      setConsentBusy(null);
-    }
-  }
-
   return (
     <section className="space-y-6 px-4 py-6">
-      <div>
-        <ul className="grid grid-cols-3 gap-2">
-          {photoIds.map((id, i) => (
-            <li
-              key={id}
-              className="relative aspect-square overflow-hidden rounded-2xl bg-[color:var(--muted)]"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`/api/photos/${encodeURIComponent(id)}`}
-                alt={i === 0 ? "Your main photo" : `Your photo ${i + 1}`}
-                className="h-full w-full object-cover"
-              />
-              <button
-                type="button"
-                onClick={() => deletePhoto(id)}
-                disabled={photoBusy === id}
-                aria-label="Remove photo"
-                className="absolute right-1.5 top-1.5 rounded-full bg-black/60 px-2 py-0.5 text-xs text-white backdrop-blur disabled:opacity-50"
-              >
-                ×
-              </button>
-            </li>
-          ))}
-          {photoIds.length < 6 ? (
-            <li className="aspect-square">
-              <label
-                className={cn(
-                  "flex h-full w-full cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-[color:var(--border)] text-2xl text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]",
-                  photoBusy === "__upload__" && "opacity-50",
-                )}
-              >
-                {photoBusy === "__upload__" ? "…" : "+"}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="sr-only"
-                  disabled={photoBusy !== null}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) uploadPhoto(file);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
-            </li>
-          ) : null}
-        </ul>
-        {photoError ? (
-          <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
-            {photoError}
-          </p>
-        ) : null}
-      </div>
+      <PhotoGrid initial={initialPhotoIds} />
 
       <form onSubmit={save} className="space-y-4">
         <Field label="Display name">
@@ -411,54 +217,7 @@ export function ProfileEditor({
           Choose which spaces you want to be matched in. You can turn each on or
           off any time.
         </p>
-        {consentLayers.length === 0 ? (
-          <p className="text-sm text-[color:var(--muted-foreground)]">
-            Nothing available yet.
-          </p>
-        ) : (
-          <ul className="divide-y divide-[color:var(--border)] rounded-2xl border border-[color:var(--border)]">
-            {consentLayers.map((layer) => {
-              const grant = consents.find((c) => c.consent_type === layer.key);
-              const granted = Boolean(grant);
-              return (
-                <li
-                  key={layer.id}
-                  className="flex items-center justify-between gap-3 px-4 py-3"
-                >
-                  <div className="min-w-0">
-                    <p className="font-medium">{layer.key}</p>
-                    {grant ? (
-                      <p className="font-mono text-[10px] text-[color:var(--muted-foreground)]">
-                        granted {new Date(grant.granted_at).toLocaleDateString()}
-                      </p>
-                    ) : null}
-                  </div>
-                  <button
-                    type="button"
-                    disabled={consentBusy === layer.key}
-                    onClick={() => toggleConsent(layer, grant)}
-                    className={
-                      granted
-                        ? "rounded-full border border-[color:var(--border)] px-4 py-1.5 text-xs font-medium text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] disabled:opacity-50"
-                        : "rounded-full bg-[color:var(--accent)] px-4 py-1.5 text-xs font-semibold text-[color:var(--accent-foreground)] disabled:opacity-50"
-                    }
-                  >
-                    {consentBusy === layer.key
-                      ? "…"
-                      : granted
-                        ? "Revoke"
-                        : "Grant"}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {consentError ? (
-          <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
-            {consentError}
-          </p>
-        ) : null}
+        <ConsentList initial={initialConsents} layers={consentLayers} />
       </div>
 
       <hr className="border-[color:var(--border)]" />
@@ -469,40 +228,7 @@ export function ProfileEditor({
           Tap what you&rsquo;re into. The more you pick, the better the people
           you&rsquo;ll see.
         </p>
-        {vocab.length === 0 ? (
-          <p className="text-sm text-[color:var(--muted-foreground)]">
-            Nothing here yet.
-          </p>
-        ) : (
-          <ul className="flex flex-wrap gap-2">
-            {vocab.map((tag) => {
-              const attached = attachedByTagId.has(tag.id);
-              const busy = tagBusy === tag.id;
-              return (
-                <li key={tag.id}>
-                  <button
-                    type="button"
-                    onClick={() => toggleTag(tag)}
-                    disabled={busy}
-                    className={cn(
-                      "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
-                      attached
-                        ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-[color:var(--accent-foreground)]"
-                        : "border-[color:var(--border)] text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]",
-                    )}
-                  >
-                    {busy ? "…" : tag.name}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {tagError ? (
-          <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
-            {tagError}
-          </p>
-        ) : null}
+        <InterestChips vocab={vocab} />
       </div>
 
       <hr className="border-[color:var(--border)]" />

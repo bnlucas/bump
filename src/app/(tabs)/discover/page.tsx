@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { ScreenHeader } from "@/components/screen-header";
 import { currentSession } from "@/lib/auth/session";
 import { loadCandidates } from "@/lib/match";
@@ -16,24 +15,7 @@ export default async function DiscoverPage() {
   const granted = await listConsents(session.externalId);
   const grantedKeys = granted.map((c) => c.consent_type);
 
-  if (grantedKeys.length === 0) {
-    return (
-      <>
-        <ScreenHeader title="Discover" />
-        <section className="px-4 py-10 text-center">
-          <p className="mb-4 text-sm text-[color:var(--muted-foreground)]">
-            Tell us what you&rsquo;re here for and we&rsquo;ll start finding people.
-          </p>
-          <Link
-            href="/profile"
-            className="inline-block rounded-full bg-[color:var(--accent)] px-5 py-2.5 text-sm font-semibold text-[color:var(--accent-foreground)]"
-          >
-            Set up your profile
-          </Link>
-        </section>
-      </>
-    );
-  }
+  if (grantedKeys.length === 0) redirect("/onboarding");
 
   const cookie = await readActiveContext();
   const activeContext = cookie && grantedKeys.includes(cookie) ? cookie : grantedKeys[0];
