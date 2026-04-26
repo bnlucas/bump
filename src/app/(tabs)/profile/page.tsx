@@ -1,18 +1,21 @@
+import { redirect } from "next/navigation";
 import { ScreenHeader } from "@/components/screen-header";
+import { currentSession } from "@/lib/auth/session";
+import { loadProfile } from "@/lib/profile";
+import { ProfileEditor } from "./profile-editor";
 
-export default function ProfilePage() {
+export const dynamic = "force-dynamic";
+
+export default async function ProfilePage() {
+  const session = await currentSession();
+  if (!session) redirect("/auth");
+
+  const profile = await loadProfile(session.externalId);
+
   return (
     <>
-      <ScreenHeader title="Profile" subtitle="Your card, photos, and preferences" />
-      <section className="px-4 py-6">
-        <div className="rounded-2xl border border-dashed border-[color:var(--border)] p-8 text-center text-[color:var(--muted-foreground)]">
-          <p className="text-sm">
-            Profile editor lands here. Photos go through ShrouDB{" "}
-            <code className="font-mono text-xs">stash</code>; profile data sits
-            in Simbee user + match preferences.
-          </p>
-        </div>
-      </section>
+      <ScreenHeader title="Profile" subtitle={profile.email ?? undefined} />
+      <ProfileEditor initial={profile} />
     </>
   );
 }
