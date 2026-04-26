@@ -3,7 +3,8 @@ import { ScreenHeader } from "@/components/screen-header";
 import { currentSession } from "@/lib/auth/session";
 import { loadProfile } from "@/lib/profile";
 import { listConsentLayers, listConsents } from "@/lib/consents";
-import { listVocabTags } from "@/lib/vocab";
+import { listVocabTags, listVocabTopics } from "@/lib/vocab";
+import { listAffinityPreferences, listAffinityRoles } from "@/lib/affinity-config";
 import { ProfileEditor } from "./profile-editor";
 
 export const dynamic = "force-dynamic";
@@ -12,12 +13,16 @@ export default async function ProfilePage() {
   const session = await currentSession();
   if (!session) redirect("/auth");
 
-  const [profile, granted, layers, vocab] = await Promise.all([
-    loadProfile(session.externalId),
-    listConsents(session.externalId),
-    listConsentLayers(),
-    listVocabTags(),
-  ]);
+  const [profile, granted, layers, vocab, topicVocab, preferences, roles] =
+    await Promise.all([
+      loadProfile(session.externalId),
+      listConsents(session.externalId),
+      listConsentLayers(),
+      listVocabTags(),
+      listVocabTopics(),
+      listAffinityPreferences(),
+      listAffinityRoles(),
+    ]);
 
   return (
     <>
@@ -27,6 +32,9 @@ export default async function ProfilePage() {
         initialConsents={granted}
         consentLayers={layers}
         vocab={vocab}
+        topicVocab={topicVocab}
+        preferences={preferences}
+        roles={roles}
       />
     </>
   );
