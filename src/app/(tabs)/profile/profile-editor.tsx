@@ -4,15 +4,20 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Profile } from "@/lib/profile";
 import type { ConsentDto, ConsentLayerDto } from "@/lib/consents";
+import type { ClientTagDto } from "@/lib/vocab";
+import type { AffinityTagDto } from "@/lib/affinity-tags";
+import { cn } from "@/lib/cn";
 
 export function ProfileEditor({
   initial,
   initialConsents,
   consentLayers,
+  vocab,
 }: {
   initial: Profile;
   initialConsents: ConsentDto[];
   consentLayers: ConsentLayerDto[];
+  vocab: ClientTagDto[];
 }) {
   const router = useRouter();
   const [displayName, setDisplayName] = useState(initial.display_name ?? "");
@@ -20,6 +25,11 @@ export function ProfileEditor({
   const [consents, setConsents] = useState(initialConsents);
   const [consentBusy, setConsentBusy] = useState<string | null>(null);
   const [consentError, setConsentError] = useState<string | null>(null);
+  const [attachedByTagId, setAttachedByTagId] = useState<Map<string, string>>(
+    () => new Map(),
+  );
+  const [tagBusy, setTagBusy] = useState<string | null>(null);
+  const [tagError, setTagError] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [saving, startSave] = useTransition();
@@ -56,6 +66,49 @@ export function ProfileEditor({
       router.replace("/auth");
       router.refresh();
     });
+  }
+
+  async function toggleTag(tag: ClientTagDto) {
+    setTagError(null);
+    setTagBusy(tag.id);
+    try {
+      const attachedId = attachedByTagId.get(tag.id);
+      if (attachedId) {
+        const res = await fetch(
+          `/api/profile/affinity-tags/${encodeURIComponent(attachedId)}`,
+          { method: "DELETE" },
+        );
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setTagError(data?.error ?? `Remove failed (${res.status}).`);
+          return;
+        }
+        setAttachedByTagId((m) => {
+          const next = new Map(m);
+          next.delete(tag.id);
+          return next;
+        });
+      } else {
+        const res = await fetch("/api/profile/affinity-tags", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tag_id: tag.id, tag_type: "client" }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setTagError(data?.error ?? `Add failed (${res.status}).`);
+          return;
+        }
+        const data = (await res.json()) as { tag: AffinityTagDto };
+        setAttachedByTagId((m) => {
+          const next = new Map(m);
+          next.set(tag.id, data.tag.id);
+          return next;
+        });
+      }
+    } finally {
+      setTagBusy(null);
+    }
   }
 
   async function toggleConsent(layer: ConsentLayerDto, grant: ConsentDto | undefined) {
@@ -189,6 +242,50 @@ export function ProfileEditor({
         {consentError ? (
           <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
             {consentError}
+          </p>
+        ) : null}
+      </div>
+
+      <hr className="border-[color:var(--border)]" />
+
+      <div>
+        <h2 className="mb-1 text-sm font-semibold">Interests</h2>
+        <p className="mb-3 text-xs text-[color:var(--muted-foreground)]">
+          Tap to add tags from your tenant&rsquo;s vocabulary. Simbee uses these
+          to score who you&rsquo;ll see in Discover.
+        </p>
+        {vocab.length === 0 ? (
+          <p className="text-sm text-[color:var(--muted-foreground)]">
+            No vocabulary tags configured for this tenant.
+          </p>
+        ) : (
+          <ul className="flex flex-wrap gap-2">
+            {vocab.map((tag) => {
+              const attached = attachedByTagId.has(tag.id);
+              const busy = tagBusy === tag.id;
+              return (
+                <li key={tag.id}>
+                  <button
+                    type="button"
+                    onClick={() => toggleTag(tag)}
+                    disabled={busy}
+                    className={cn(
+                      "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
+                      attached
+                        ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-[color:var(--accent-foreground)]"
+                        : "border-[color:var(--border)] text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]",
+                    )}
+                  >
+                    {busy ? "…" : tag.name}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {tagError ? (
+          <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+            {tagError}
           </p>
         ) : null}
       </div>
