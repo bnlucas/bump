@@ -3,14 +3,19 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { PostView, CommentView } from "@/lib/posts";
+import type { ClientTopicDto } from "@/lib/vocab";
 import { cn } from "@/lib/cn";
 
 export function CommunityFeed({
   initial,
   userId,
+  layerKeys,
+  topicVocab,
 }: {
   initial: PostView[];
   userId: string;
+  layerKeys: string[];
+  topicVocab: ClientTopicDto[];
 }) {
   void userId;
   const router = useRouter();
@@ -18,6 +23,8 @@ export function CommunityFeed({
   const [composeOpen, setComposeOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [layerKey, setLayerKey] = useState(layerKeys[0] ?? "");
+  const [topicId, setTopicId] = useState("");
   const [composeError, setComposeError] = useState<string | null>(null);
   const [submitting, startSubmit] = useTransition();
 
@@ -29,10 +36,16 @@ export function CommunityFeed({
       return;
     }
     startSubmit(async () => {
+      const topicName = topicVocab.find((t) => t.id === topicId)?.name;
       const res = await fetch("/api/communities/posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, body }),
+        body: JSON.stringify({
+          title,
+          body,
+          ...(layerKey ? { layer_key: layerKey } : {}),
+          ...(topicId ? { topic_id: topicId, topic_name: topicName } : {}),
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -43,6 +56,7 @@ export function CommunityFeed({
       setPosts((p) => [data.post, ...p]);
       setTitle("");
       setBody("");
+      setTopicId("");
       setComposeOpen(false);
       router.refresh();
     });
@@ -71,6 +85,36 @@ export function CommunityFeed({
             rows={5}
             className="w-full resize-none rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm outline-none focus:border-[color:var(--accent)]"
           />
+          {layerKeys.length > 0 ? (
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={layerKey}
+                onChange={(e) => setLayerKey(e.target.value)}
+                className="rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm outline-none focus:border-[color:var(--accent)]"
+                aria-label="Where"
+              >
+                {layerKeys.map((k) => (
+                  <option key={k} value={k}>
+                    {k}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={topicId}
+                onChange={(e) => setTopicId(e.target.value)}
+                className="rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm outline-none focus:border-[color:var(--accent)]"
+                aria-label="About"
+                disabled={topicVocab.length === 0}
+              >
+                <option value="">About anything</option>
+                {topicVocab.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           {composeError ? (
             <p role="alert" className="text-sm text-red-600 dark:text-red-400">
               {composeError}
@@ -223,6 +267,15 @@ function PostCard({ post }: { post: PostView }) {
           ? ` · ${new Date(post.published_at).toLocaleDateString()}`
           : null}
       </p>
+      {post.layer_key || post.topic_name ? (
+        <p className="mt-1">
+          <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--muted)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[color:var(--muted-foreground)]">
+            {post.layer_key ?? "general"}
+            {post.topic_name ? <span className="opacity-60">·</span> : null}
+            {post.topic_name ? <span>{post.topic_name}</span> : null}
+          </span>
+        </p>
+      ) : null}
       <h2 className="mt-1 text-base font-semibold tracking-tight">{post.title}</h2>
       <p className="mt-2 whitespace-pre-line text-sm">{post.body}</p>
 

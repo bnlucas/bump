@@ -54,6 +54,9 @@ async function ensureNamespace(name: string): Promise<void> {
 interface StoredBody {
   title: string;
   body: string;
+  layer_key?: string;
+  topic_id?: string;
+  topic_name?: string;
 }
 
 async function readBody(externalId: string): Promise<StoredBody | null> {
@@ -65,6 +68,9 @@ async function readBody(externalId: string): Promise<StoredBody | null> {
     return {
       title: typeof parsed.title === "string" ? parsed.title : "",
       body: parsed.body,
+      layer_key: typeof parsed.layer_key === "string" ? parsed.layer_key : undefined,
+      topic_id: typeof parsed.topic_id === "string" ? parsed.topic_id : undefined,
+      topic_name: typeof parsed.topic_name === "string" ? parsed.topic_name : undefined,
     };
   } catch {
     return null;
@@ -78,6 +84,8 @@ export interface PostView {
   author_name: string | null;
   title: string;
   body: string;
+  layer_key: string | null;
+  topic_name: string | null;
   published_at: string | null;
   engagements_count: number;
   current_user_like_engagement_id: string | null;
@@ -112,6 +120,8 @@ async function hydrate(
     author_name: typeof fields.display_name === "string" ? fields.display_name : null,
     title: body.title,
     body: body.body,
+    layer_key: body.layer_key ?? null,
+    topic_name: body.topic_name ?? null,
     published_at: item.published_at ?? null,
     engagements_count: item.engagements_count ?? 0,
     current_user_like_engagement_id: likeEngagementId,
@@ -134,10 +144,17 @@ export async function listPosts(
   return hydrated.filter((p): p is PostView => p !== null);
 }
 
+export interface CreatePostInput {
+  title: string;
+  body: string;
+  layer_key?: string;
+  topic_id?: string;
+  topic_name?: string;
+}
+
 export async function createPost(
   authorExternalId: string,
-  title: string,
-  body: string,
+  input: CreatePostInput,
 ): Promise<PostView | null> {
   const externalId = randomUUID();
 
@@ -145,7 +162,13 @@ export async function createPost(
   await shroudb().shroudb.put(
     POSTS_NAMESPACE,
     externalId,
-    JSON.stringify({ title, body } satisfies StoredBody),
+    JSON.stringify({
+      title: input.title,
+      body: input.body,
+      ...(input.layer_key ? { layer_key: input.layer_key } : {}),
+      ...(input.topic_id ? { topic_id: input.topic_id } : {}),
+      ...(input.topic_name ? { topic_name: input.topic_name } : {}),
+    } satisfies StoredBody),
   );
 
   const res = await simbeeRaw<Envelope<ContentItemDto>>("/api/v1/content", {
