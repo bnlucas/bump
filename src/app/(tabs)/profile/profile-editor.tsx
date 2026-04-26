@@ -10,9 +10,11 @@ import type {
   ClientAffinityPreferenceDto,
   ClientAffinityRoleDto,
 } from "@/lib/affinity-config";
+import type { MatchPreferences } from "@/lib/match-preferences";
 import { PhotoGrid } from "@/components/photo-grid";
 import { ConsentList } from "@/components/consent-list";
 import { InterestChips } from "@/components/interest-chips";
+import { PreferencesForm } from "@/components/preferences-form";
 
 interface TopicEntry extends AffinityTopicDto {
   topicName: string;
@@ -29,6 +31,7 @@ export function ProfileEditor({
   preferences,
   roles,
   initialPhotoIds,
+  initialMatchPrefs,
 }: {
   initial: Profile;
   initialConsents: ConsentDto[];
@@ -38,6 +41,7 @@ export function ProfileEditor({
   preferences: ClientAffinityPreferenceDto[];
   roles: ClientAffinityRoleDto[];
   initialPhotoIds: string[];
+  initialMatchPrefs: MatchPreferences;
 }) {
   const router = useRouter();
   const [displayName, setDisplayName] = useState(initial.display_name ?? "");
@@ -218,6 +222,16 @@ export function ProfileEditor({
           off any time.
         </p>
         <ConsentList initial={initialConsents} layers={consentLayers} />
+      </div>
+
+      <hr className="border-[color:var(--border)]" />
+
+      <div>
+        <h2 className="mb-1 text-sm font-semibold">Who you want to meet</h2>
+        <p className="mb-3 text-xs text-[color:var(--muted-foreground)]">
+          The basics. We use these to filter who shows up.
+        </p>
+        <PreferencesForm initial={initialMatchPrefs} />
       </div>
 
       <hr className="border-[color:var(--border)]" />
