@@ -1,10 +1,15 @@
 import "server-only";
 import { simbee, type components } from "./simbee";
+import { simbeeRaw } from "./simbee-raw";
 import { sigil, SIGIL_USER_SCHEMA } from "./sigil";
 import { heraldAdmin } from "./herald-admin";
+import {
+  signalTypeId,
+  SIGNAL_KEY_INTEREST,
+  SIGNAL_KEY_PASS,
+} from "./simbee-config";
 
-const SIGNAL_TYPE_INTEREST = process.env.SIMBEE_SIGNAL_TYPE_INTEREST;
-const SIGNAL_TYPE_PASS = process.env.SIMBEE_SIGNAL_TYPE_PASS;
+type MatchDto = components["schemas"]["DiscoveryMatchResultDto"];
 
 export interface Candidate {
   external_id: string;
@@ -14,7 +19,33 @@ export interface Candidate {
   explanation: string[];
 }
 
-type MatchDto = components["schemas"]["DiscoveryMatchResultDto"];
+export type SwipeDirection = "right" | "left";
+
+export interface Permission {
+  allowed: boolean;
+  reason?: string;
+}
+
+export interface ConversationSummary {
+  stream_id: string;
+  counterpart_id: string;
+  display_name: string | null;
+  score: number;
+  matched_at: string;
+}
+
+interface PermissionEnvelope {
+  data?: { allowed?: boolean; reason?: string };
+}
+
+interface UserEnvelope {
+  data?: { external_id: string; traits?: Record<string, unknown> };
+}
+
+export function streamIdForPair(a: string, b: string): string {
+  const [lo, hi] = [a, b].sort();
+  return `match-${lo}-${hi}`;
+}
 
 export async function loadCandidates(externalId: string, limit = 10): Promise<Candidate[]> {
   const res = await simbee().fetch.GET("/api/v1/users/{external_id}/matches", {
@@ -22,11 +53,7 @@ export async function loadCandidates(externalId: string, limit = 10): Promise<Ca
   });
   if (!res.response.ok) return [];
   const matches = (res.data?.data ?? []) as MatchDto[];
-
-  const candidates = await Promise.all(
-    matches.slice(0, limit).map(async (m) => hydrateCandidate(m)),
-  );
-  return candidates;
+  return Promise.all(matches.slice(0, limit).map(hydrateCandidate));
 }
 
 async function hydrateCandidate(m: MatchDto): Promise<Candidate> {
@@ -48,16 +75,14 @@ async function hydrateCandidate(m: MatchDto): Promise<Candidate> {
   };
 }
 
-export type SwipeDirection = "right" | "left";
-
 export async function recordSwipe(
   externalId: string,
   targetId: string,
   direction: SwipeDirection,
 ): Promise<void> {
-  const signalTypeId =
-    direction === "right" ? SIGNAL_TYPE_INTEREST : SIGNAL_TYPE_PASS;
-  if (!signalTypeId) return;
+  const key = direction === "right" ? SIGNAL_KEY_INTEREST : SIGNAL_KEY_PASS;
+  const id = await signalTypeId(key);
+  if (!id) return;
   await simbee()
     .fetch.POST("/api/v1/users/{external_id}/signals", {
       params: { path: { external_id: externalId } },
@@ -65,65 +90,104 @@ export async function recordSwipe(
         external_id: externalId,
         target_id: targetId,
         target_type: "user",
-        signal_type_id: signalTypeId,
+        signal_type_id: id,
         strength: direction === "right" ? 1 : -1,
       },
     })
     .catch(() => {});
 }
 
-export function streamIdForPair(a: string, b: string): string {
-  const [lo, hi] = [a, b].sort();
-  return `match-${lo}-${hi}`;
+export async function messagingAllowed(meId: string, themId: string): Promise<Permission> {
+  const res = await simbeeRaw<PermissionEnvelope>(
+    `/api/v1/users/${encodeURIComponent(meId)}/messages/check/${encodeURIComponent(themId)}`,
+  );
+  if (!res.ok || !res.data?.data) {
+    return { allowed: false, reason: "Permission check failed." };
+  }
+  return {
+    allowed: Boolean(res.data.data.allowed),
+    reason: res.data.data.reason,
+  };
 }
 
-async function getTraits(externalId: string): Promise<Record<string, unknown>> {
-  const res = await simbee().fetch.GET("/api/v1/users/{external_id}", {
-    params: { path: { external_id: externalId } },
-  });
-  return (res.data?.data?.traits ?? {}) as Record<string, unknown>;
+export interface OpenConversationResult extends Permission {
+  stream_id: string | null;
 }
 
-async function pushStreamIdToTraits(externalId: string, streamId: string): Promise<void> {
-  const traits = await getTraits(externalId);
-  const current = Array.isArray(traits.stream_ids) ? (traits.stream_ids as unknown[]) : [];
-  if (current.includes(streamId)) return;
-  const nextTraits = { ...traits, stream_ids: [...current, streamId] };
-  await simbee().fetch.PUT("/api/v1/users/{external_id}", {
-    params: { path: { external_id: externalId } },
-    body: { traits: nextTraits as unknown as Record<string, never> },
-  });
-}
+export async function openConversation(
+  meId: string,
+  themId: string,
+): Promise<OpenConversationResult> {
+  const permission = await messagingAllowed(meId, themId);
+  if (!permission.allowed) return { ...permission, stream_id: null };
 
-export async function openMatchStream(
-  externalId: string,
-  targetId: string,
-): Promise<string> {
-  const streamId = streamIdForPair(externalId, targetId);
+  const streamId = streamIdForPair(meId, themId);
   const admin = heraldAdmin();
 
   const existing = await admin.streams.get(streamId).catch(() => null);
   if (!existing) {
     await admin.streams.create(streamId, `match:${streamId}`);
   }
-
   const members = await admin.members.list(streamId).catch(() => []);
   const memberIds = new Set(members.map((m) => m.user_id));
   const adds: Promise<unknown>[] = [];
-  if (!memberIds.has(externalId)) adds.push(admin.members.add(streamId, externalId));
-  if (!memberIds.has(targetId)) adds.push(admin.members.add(streamId, targetId));
+  if (!memberIds.has(meId)) adds.push(admin.members.add(streamId, meId));
+  if (!memberIds.has(themId)) adds.push(admin.members.add(streamId, themId));
   await Promise.all(adds);
 
-  await Promise.all([
-    pushStreamIdToTraits(externalId, streamId),
-    pushStreamIdToTraits(targetId, streamId),
-  ]);
-
-  return streamId;
+  return { allowed: true, stream_id: streamId };
 }
 
-export async function userStreamIds(externalId: string): Promise<string[]> {
-  const traits = await getTraits(externalId);
-  const ids = Array.isArray(traits.stream_ids) ? (traits.stream_ids as unknown[]) : [];
-  return ids.filter((x): x is string => typeof x === "string");
+export async function listConversations(meId: string): Promise<ConversationSummary[]> {
+  const res = await simbee().fetch.GET("/api/v1/users/{external_id}/matches", {
+    params: { path: { external_id: meId } },
+  });
+  if (!res.response.ok) return [];
+  const matches = (res.data?.data ?? []) as MatchDto[];
+
+  const checks = await Promise.all(
+    matches.map(async (m) => {
+      const permission = await messagingAllowed(meId, m.matched_user_id);
+      if (!permission.allowed) return null;
+      const envelope = await sigil()
+        .userGet(SIGIL_USER_SCHEMA, m.matched_user_id)
+        .catch(() => null);
+      const fields = (envelope?.fields ?? {}) as Record<string, unknown>;
+      return {
+        stream_id: streamIdForPair(meId, m.matched_user_id),
+        counterpart_id: m.matched_user_id,
+        display_name:
+          typeof fields.display_name === "string" ? fields.display_name : null,
+        score: m.score,
+        matched_at: m.matched_at,
+      } satisfies ConversationSummary;
+    }),
+  );
+  return checks.filter((c): c is ConversationSummary => c !== null);
+}
+
+export async function counterpartId(streamId: string, meId: string): Promise<string | null> {
+  const members = await heraldAdmin()
+    .members.list(streamId)
+    .catch(() => []);
+  return members.find((m) => m.user_id !== meId)?.user_id ?? null;
+}
+
+// Re-exported helpers used by API routes that need to re-fetch a single profile.
+export async function userBasic(externalId: string): Promise<{
+  external_id: string;
+  display_name: string | null;
+} | null> {
+  const userRes = await simbeeRaw<UserEnvelope>(
+    `/api/v1/users/${encodeURIComponent(externalId)}`,
+  );
+  if (!userRes.ok || !userRes.data?.data) return null;
+  const envelope = await sigil()
+    .userGet(SIGIL_USER_SCHEMA, externalId)
+    .catch(() => null);
+  const fields = (envelope?.fields ?? {}) as Record<string, unknown>;
+  return {
+    external_id: externalId,
+    display_name: typeof fields.display_name === "string" ? fields.display_name : null,
+  };
 }

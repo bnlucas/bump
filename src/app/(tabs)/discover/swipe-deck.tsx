@@ -29,9 +29,17 @@ export function SwipeDeck({ initial }: { initial: Candidate[] }) {
         setQueue((q) => [target, ...q]);
         return;
       }
-      const data = (await res.json()) as { stream_id: string | null };
-      if (data.stream_id) {
-        router.push(`/chat/${encodeURIComponent(data.stream_id)}`);
+      const data = (await res.json()) as {
+        stream_id: string | null;
+        allowed: boolean;
+        reason?: string;
+      };
+      if (direction === "right") {
+        if (data.allowed && data.stream_id) {
+          router.push(`/chat/${encodeURIComponent(data.stream_id)}`);
+        } else if (!data.allowed) {
+          setError(data.reason ?? "This connection isn't permitted right now.");
+        }
       }
     });
   }

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireSession, isUnauthorized } from "@/lib/auth/guard";
-import { openMatchStream, recordSwipe, type SwipeDirection } from "@/lib/match";
+import { openConversation, recordSwipe, type SwipeDirection } from "@/lib/match";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +29,10 @@ export async function POST(request: NextRequest) {
 
   await recordSwipe(session.externalId, parsed.target_id, parsed.direction);
 
-  if (parsed.direction === "right") {
-    const stream_id = await openMatchStream(session.externalId, parsed.target_id);
-    return NextResponse.json({ stream_id });
+  if (parsed.direction !== "right") {
+    return NextResponse.json({ stream_id: null, allowed: false });
   }
-  return NextResponse.json({ stream_id: null });
+
+  const result = await openConversation(session.externalId, parsed.target_id);
+  return NextResponse.json(result);
 }
