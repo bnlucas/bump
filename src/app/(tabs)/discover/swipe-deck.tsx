@@ -16,27 +16,32 @@ export function SwipeDeck({
 }) {
   const router = useRouter();
   const [queue, setQueue] = useState(initial);
+  const [leaving, setLeaving] = useState<"right" | "left" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [switching, startSwitch] = useTransition();
   const top = queue[0];
+  const ANIM_MS = 250;
 
   function swipe(direction: "right" | "left") {
-    if (!top) return;
+    if (!top || leaving) return;
     setError(null);
+    setLeaving(direction);
     const target = top;
-    setQueue((q) => q.slice(1));
 
     start(async () => {
-      const res = await fetch("/api/discover/swipe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target_id: target.external_id, direction }),
-      });
+      const [res] = await Promise.all([
+        fetch("/api/discover/swipe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target_id: target.external_id, direction }),
+        }),
+        new Promise((r) => setTimeout(r, ANIM_MS)),
+      ]);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setError(data?.error ?? `Swipe failed (${res.status}).`);
-        setQueue((q) => [target, ...q]);
+        setLeaving(null);
         return;
       }
       const data = (await res.json()) as {
@@ -44,6 +49,8 @@ export function SwipeDeck({
         allowed: boolean;
         reason?: string;
       };
+      setQueue((q) => q.slice(1));
+      setLeaving(null);
       if (direction === "right") {
         if (data.allowed && data.stream_id) {
           router.push(`/chat/${encodeURIComponent(data.stream_id)}`);
@@ -103,7 +110,14 @@ export function SwipeDeck({
         </div>
       ) : (
         <>
-          <article className="overflow-hidden rounded-3xl border border-[color:var(--border)] bg-[color:var(--muted)] shadow-sm">
+          <article
+            key={top.external_id}
+            className={cn(
+              "overflow-hidden rounded-3xl border border-[color:var(--border)] bg-[color:var(--muted)] shadow-sm transition-all duration-[250ms] ease-out",
+              leaving === "right" && "translate-x-full rotate-6 opacity-0",
+              leaving === "left" && "-translate-x-full -rotate-6 opacity-0",
+            )}
+          >
             {top.primary_photo_id ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
