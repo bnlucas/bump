@@ -10,11 +10,13 @@ export function CommunityFeed({
   initial,
   userId,
   layerKeys,
+  activeFilter,
   topicVocab,
 }: {
   initial: PostView[];
   userId: string;
   layerKeys: string[];
+  activeFilter: string | null;
   topicVocab: ClientTopicDto[];
 }) {
   void userId;
@@ -23,10 +25,23 @@ export function CommunityFeed({
   const [composeOpen, setComposeOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [layerKey, setLayerKey] = useState(layerKeys[0] ?? "");
+  const [layerKey, setLayerKey] = useState(activeFilter ?? layerKeys[0] ?? "");
   const [topicId, setTopicId] = useState("");
   const [composeError, setComposeError] = useState<string | null>(null);
   const [submitting, startSubmit] = useTransition();
+  const [filterBusy, startFilterSwitch] = useTransition();
+
+  function setFilter(next: string | null) {
+    if (next === activeFilter) return;
+    startFilterSwitch(async () => {
+      await fetch("/api/discover/context", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ context: next }),
+      });
+      router.refresh();
+    });
+  }
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -64,6 +79,31 @@ export function CommunityFeed({
 
   return (
     <section className="px-4 py-4">
+      {layerKeys.length > 0 ? (
+        <nav
+          aria-label="Filter"
+          className="mb-4 flex gap-2 overflow-x-auto pb-1"
+        >
+          <FilterPill
+            active={activeFilter === null}
+            disabled={filterBusy}
+            onClick={() => setFilter(null)}
+          >
+            All
+          </FilterPill>
+          {layerKeys.map((k) => (
+            <FilterPill
+              key={k}
+              active={activeFilter === k}
+              disabled={filterBusy}
+              onClick={() => setFilter(k)}
+            >
+              {k}
+            </FilterPill>
+          ))}
+        </nav>
+      ) : null}
+
       {composeOpen ? (
         <form
           onSubmit={submit}
@@ -152,7 +192,11 @@ export function CommunityFeed({
 
       {posts.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-[color:var(--border)] p-8 text-center text-[color:var(--muted-foreground)]">
-          <p className="text-sm">Nothing here yet. Be the first.</p>
+          <p className="text-sm">
+            {activeFilter
+              ? `Nothing in ${activeFilter} yet. Be the first.`
+              : "Nothing here yet. Be the first."}
+          </p>
         </div>
       ) : (
         <ul className="space-y-3">
@@ -351,5 +395,33 @@ function PostCard({ post }: { post: PostView }) {
         </div>
       ) : null}
     </li>
+  );
+}
+
+function FilterPill({
+  active,
+  disabled,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium transition-colors disabled:opacity-50",
+        active
+          ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-[color:var(--accent-foreground)]"
+          : "border-[color:var(--border)] text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]",
+      )}
+    >
+      {children}
+    </button>
   );
 }
