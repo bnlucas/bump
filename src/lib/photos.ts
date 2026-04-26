@@ -49,25 +49,36 @@ export interface PhotoBytes {
 }
 
 export async function retrievePhoto(photoId: string): Promise<PhotoBytes | null> {
-  const res = await shroudb()
+  const res = (await shroudb()
     .stash.retrieve(photoId)
-    .catch(() => null);
-  if (!res) return null;
-  const record = res as Record<string, unknown>;
-  const data =
-    typeof record.data_b64 === "string"
-      ? record.data_b64
-      : typeof record.value === "string"
-        ? record.value
-        : null;
-  if (!data) return null;
+    .catch(() => null)) as unknown;
+  if (!res || !Array.isArray(res) || res.length < 2) return null;
+
+  const [rawMetadata, plaintext] = res as [unknown, unknown];
+  if (typeof plaintext !== "string") return null;
+
+  const metadata: Record<string, unknown> =
+    typeof rawMetadata === "string"
+      ? safeJsonObject(rawMetadata)
+      : rawMetadata && typeof rawMetadata === "object"
+        ? (rawMetadata as Record<string, unknown>)
+        : {};
 
   const contentType =
-    (typeof record.content_type === "string" && record.content_type) ||
-    (typeof record.contentType === "string" && record.contentType) ||
-    "application/octet-stream";
+    typeof metadata.content_type === "string" && metadata.content_type
+      ? metadata.content_type
+      : "application/octet-stream";
 
-  return { bytes: Buffer.from(data, "base64"), contentType };
+  return { bytes: Buffer.from(plaintext, "base64"), contentType };
+}
+
+function safeJsonObject(s: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(s);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 export async function addPhoto(
