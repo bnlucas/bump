@@ -8,6 +8,7 @@ import {
   SIGNAL_KEY_INTEREST,
   SIGNAL_KEY_PASS,
 } from "./simbee-config";
+import { notifyUser } from "./notifications";
 
 type MatchDto = components["schemas"]["MatchResultDto"];
 
@@ -151,7 +152,18 @@ export async function openConversation(
   const adds: Promise<unknown>[] = [];
   if (!memberIds.has(meId)) adds.push(admin.members.add(streamId, meId));
   if (!memberIds.has(themId)) adds.push(admin.members.add(streamId, themId));
+  const wasNew = !existing || !memberIds.has(themId);
   await Promise.all(adds);
+
+  if (wasNew) {
+    const senderName =
+      (await userBasic(meId))?.display_name ?? "Someone";
+    void notifyUser({
+      recipient: themId,
+      subject: "New connection",
+      body: `${senderName} wants to connect with you.`,
+    });
+  }
 
   return { allowed: true, stream_id: streamId };
 }
