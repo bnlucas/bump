@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
 import { simbee } from "@/lib/simbee";
+import { sigil, SIGIL_USER_SCHEMA } from "@/lib/sigil";
+import { setSessionCookies } from "@/lib/auth/cookies";
 
 export const dynamic = "force-dynamic";
 
@@ -30,22 +32,29 @@ export async function POST(request: NextRequest) {
 
   const externalId = randomUUID();
 
-  const { data, error } = await simbee().fetch.POST("/api/v1/users", {
-    body: { external_id: externalId },
+  await sigil().userCreate(SIGIL_USER_SCHEMA, externalId, {
+    email: parsed.email,
+    password: parsed.password,
+    display_name: parsed.displayName ?? "",
   });
 
-  if (error) {
-    return NextResponse.json(
-      { error: "Failed to create Simbee graph user.", detail: error },
-      { status: 502 },
-    );
+  try {
+    await simbee().fetch.POST("/api/v1/users", { body: { external_id: externalId } });
+  } catch (err) {
+    await sigil().userDelete(SIGIL_USER_SCHEMA, externalId).catch(() => {});
+    throw err;
   }
 
+  const tokens = await sigil().sessionLogin(
+    SIGIL_USER_SCHEMA,
+    "email",
+    parsed.email,
+    parsed.password,
+  );
+  await setSessionCookies(tokens);
+
   return NextResponse.json(
-    {
-      external_id: externalId,
-      user: data,
-    },
+    { external_id: externalId, expires_in: tokens.expires_in },
     { status: 201 },
   );
 }
