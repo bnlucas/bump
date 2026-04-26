@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      next:
+        patterns: ["next", "eslint-config-next"]
+      react:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
+      shroudb:
+        patterns: ["@shroudb/*"]
+      herald:
+        patterns: ["@skeptik-io/*"]
+      tailwind:
+        patterns: ["tailwindcss", "@tailwindcss/*"]
+      types:
+        patterns: ["@types/*"]
+      lint:
+        patterns: ["eslint", "eslint-*"]
+      test:
+        patterns: ["vitest"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
