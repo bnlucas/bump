@@ -5,6 +5,7 @@ import { sigil, SIGIL_USER_SCHEMA } from "./sigil";
 import { heraldAdmin } from "./herald-admin";
 import {
   signalTypeId,
+  consentLayerId,
   SIGNAL_KEY_INTEREST,
   SIGNAL_KEY_PASS,
 } from "./simbee-config";
@@ -47,12 +48,24 @@ export function streamIdForPair(a: string, b: string): string {
   return `match-${lo}-${hi}`;
 }
 
-export async function loadCandidates(externalId: string, limit = 10): Promise<Candidate[]> {
+export async function loadCandidates(
+  externalId: string,
+  layerKey: string | null,
+  limit = 10,
+): Promise<Candidate[]> {
   const res = await simbee().fetch.GET("/api/v1/users/{external_id}/matches", {
     params: { path: { external_id: externalId } },
   });
   if (!res.response.ok) return [];
-  const matches = (res.data?.data ?? []) as MatchDto[];
+  let matches = (res.data?.data ?? []) as MatchDto[];
+
+  if (layerKey) {
+    const layerId = await consentLayerId(layerKey);
+    if (layerId) {
+      matches = matches.filter((m) => m.consent_layer_id === layerId);
+    }
+  }
+
   return Promise.all(matches.slice(0, limit).map(hydrateCandidate));
 }
 
@@ -138,12 +151,22 @@ export async function openConversation(
   return { allowed: true, stream_id: streamId };
 }
 
-export async function listConversations(meId: string): Promise<ConversationSummary[]> {
+export async function listConversations(
+  meId: string,
+  layerKey: string | null = null,
+): Promise<ConversationSummary[]> {
   const res = await simbee().fetch.GET("/api/v1/users/{external_id}/matches", {
     params: { path: { external_id: meId } },
   });
   if (!res.response.ok) return [];
-  const matches = (res.data?.data ?? []) as MatchDto[];
+  let matches = (res.data?.data ?? []) as MatchDto[];
+
+  if (layerKey) {
+    const layerId = await consentLayerId(layerKey);
+    if (layerId) {
+      matches = matches.filter((m) => m.consent_layer_id === layerId);
+    }
+  }
 
   const checks = await Promise.all(
     matches.map(async (m) => {

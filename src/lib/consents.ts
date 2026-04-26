@@ -1,5 +1,6 @@
 import "server-only";
 import { simbeeRaw } from "./simbee-raw";
+import { ensureAffinity } from "./affinities";
 
 export interface ConsentDto {
   id: string;
@@ -75,7 +76,16 @@ export async function grantConsent(
     )}/consents`,
     { method: "POST", body: JSON.stringify({ consent_type }) },
   );
-  return res.ok ? (res.data?.data ?? null) : null;
+  if (!res.ok || !res.data?.data) return null;
+
+  // Each consent layer gets its own affinity — the user's interest profile
+  // for that context. We resolve the layer by key so matches can compute.
+  const layer = (await listConsentLayers()).find((l) => l.key === consent_type);
+  if (layer) {
+    await ensureAffinity(externalId, layer.id).catch(() => null);
+  }
+
+  return res.data.data;
 }
 
 export async function revokeConsent(
