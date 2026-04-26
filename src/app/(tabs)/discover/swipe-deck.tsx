@@ -20,6 +20,7 @@ export function SwipeDeck({
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [switching, startSwitch] = useTransition();
+  const [optimisticContext, setOptimisticContext] = useState(activeContext);
   const top = queue[0];
   const ANIM_MS = 250;
 
@@ -62,7 +63,8 @@ export function SwipeDeck({
   }
 
   function switchContext(next: string) {
-    if (next === activeContext || switching) return;
+    if (next === optimisticContext || switching) return;
+    setOptimisticContext(next);
     startSwitch(async () => {
       const res = await fetch("/api/discover/context", {
         method: "POST",
@@ -72,6 +74,7 @@ export function SwipeDeck({
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setError(data?.error ?? `Couldn't switch context (${res.status}).`);
+        setOptimisticContext(activeContext);
         return;
       }
       router.refresh();
@@ -93,7 +96,7 @@ export function SwipeDeck({
               disabled={switching}
               className={cn(
                 "shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium transition-colors",
-                c === activeContext
+                c === optimisticContext
                   ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-[color:var(--accent-foreground)]"
                   : "border-[color:var(--border)] text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]",
               )}

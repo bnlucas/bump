@@ -30,9 +30,11 @@ export function CommunityFeed({
   const [composeError, setComposeError] = useState<string | null>(null);
   const [submitting, startSubmit] = useTransition();
   const [filterBusy, startFilterSwitch] = useTransition();
+  const [optimisticFilter, setOptimisticFilter] = useState<string | null>(activeFilter);
 
   function setFilter(next: string | null) {
-    if (next === activeFilter) return;
+    if (next === optimisticFilter) return;
+    setOptimisticFilter(next);
     startFilterSwitch(async () => {
       await fetch("/api/discover/context", {
         method: "POST",
@@ -85,7 +87,7 @@ export function CommunityFeed({
           className="mb-4 flex gap-2 overflow-x-auto pb-1"
         >
           <FilterPill
-            active={activeFilter === null}
+            active={optimisticFilter === null}
             disabled={filterBusy}
             onClick={() => setFilter(null)}
           >
@@ -94,7 +96,7 @@ export function CommunityFeed({
           {layerKeys.map((k) => (
             <FilterPill
               key={k}
-              active={activeFilter === k}
+              active={optimisticFilter === k}
               disabled={filterBusy}
               onClick={() => setFilter(k)}
             >
