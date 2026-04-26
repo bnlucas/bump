@@ -15,9 +15,11 @@ import type { HeraldClientCreds } from "@/lib/herald-token";
 export function ChatRoom({
   creds,
   streamId,
+  recipientExternalId,
 }: {
   creds: HeraldClientCreds;
   streamId: string;
+  recipientExternalId: string | null;
 }) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,13 +70,38 @@ export function ChatRoom({
 
   return (
     <HeraldChatProvider client={client} chat={chat} userId={creds.userId}>
-      <ChatLayout streamId={streamId} userId={creds.userId} />
+      <ChatLayout
+        streamId={streamId}
+        userId={creds.userId}
+        recipientExternalId={recipientExternalId}
+      />
     </HeraldChatProvider>
   );
 }
 
-function ChatLayout({ streamId, userId }: { streamId: string; userId: string }) {
+function ChatLayout({
+  streamId,
+  userId,
+  recipientExternalId,
+}: {
+  streamId: string;
+  userId: string;
+  recipientExternalId: string | null;
+}) {
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  function pingNotify(body: string) {
+    if (!recipientExternalId) return;
+    void fetch("/api/notify/dm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        stream_id: streamId,
+        recipient_external_id: recipientExternalId,
+        preview: body,
+      }),
+    }).catch(() => {});
+  }
 
   return (
     <HeraldChat streamId={streamId} scrollRef={scrollRef}>
@@ -97,7 +124,14 @@ function ChatLayout({ streamId, userId }: { streamId: string; userId: string }) 
 
           <MessageInput streamId={streamId}>
             {({ send, sendTyping }) => (
-              <Composer onSend={send} onTyping={sendTyping} />
+              <Composer
+                onSend={async (body) => {
+                  const result = await send(body);
+                  pingNotify(body);
+                  return result;
+                }}
+                onTyping={sendTyping}
+              />
             )}
           </MessageInput>
         </>

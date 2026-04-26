@@ -49,7 +49,11 @@ export default async function ChatStreamPage({
   return (
     <div className="flex h-dvh flex-col">
       <ChatHeader title={counterpartName} photoId={counterpartPhotoId} />
-      <ChatRoom creds={creds} streamId={streamId} />
+      <ChatRoom
+        creds={creds}
+        streamId={streamId}
+        recipientExternalId={counterpartId}
+      />
     </div>
   );
 }
