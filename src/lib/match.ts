@@ -10,7 +10,7 @@ import {
   SIGNAL_KEY_PASS,
 } from "./simbee-config";
 
-type MatchDto = components["schemas"]["DiscoveryMatchResultDto"];
+type MatchDto = components["schemas"]["MatchResultDto"];
 
 export interface Candidate {
   external_id: string;
@@ -34,7 +34,7 @@ export interface ConversationSummary {
   display_name: string | null;
   primary_photo_id: string | null;
   score: number;
-  matched_at: string;
+  matched_at: string | null;
 }
 
 interface PermissionEnvelope {
@@ -197,7 +197,7 @@ export async function listConversations(
           typeof fields.display_name === "string" ? fields.display_name : null,
         primary_photo_id: readPrimaryPhotoId(traits),
         score: m.score,
-        matched_at: m.matched_at,
+        matched_at: m.matched_at ?? null,
       } satisfies ConversationSummary;
     }),
   );

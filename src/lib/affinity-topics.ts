@@ -1,27 +1,9 @@
 import "server-only";
 import { simbeeRaw } from "./simbee-raw";
+import type { components } from "./simbee-schema";
 
-export interface AffinityTopicDto {
-  id: string;
-  affinity_id: string;
-  topic_id: string;
-  topic_type: string;
-  preference_id: string;
-  role_id?: string;
-  reference_id?: string;
-  important?: boolean;
-  must_have?: boolean;
-}
-
-export interface CreateAffinityTopic {
-  topic_id: string;
-  topic_type: string;
-  preference_id: string;
-  role_id?: string;
-  reference_id?: string;
-  important?: boolean;
-  must_have?: boolean;
-}
+export type AffinityTopicDto = components["schemas"]["AffinityTopicDto"];
+export type CreateAffinityTopic = components["schemas"]["CreateAffinityTopic"];
 
 interface Envelope<T> {
   data: T;

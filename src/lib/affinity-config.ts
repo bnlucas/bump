@@ -1,19 +1,10 @@
 import "server-only";
 import { simbeeRaw } from "./simbee-raw";
+import type { components } from "./simbee-schema";
 
-export interface ClientAffinityPreferenceDto {
-  id: string;
-  client_id: string;
-  key: string;
-  affinity_preference_id?: string;
-}
-
-export interface ClientAffinityRoleDto {
-  id: string;
-  client_id: string;
-  key: string;
-  affinity_role_id?: string;
-}
+export type ClientAffinityPreferenceDto =
+  components["schemas"]["ClientAffinityPreferenceDto"];
+export type ClientAffinityRoleDto = components["schemas"]["ClientAffinityRoleDto"];
 
 interface ListEnvelope<T> {
   data: T[];

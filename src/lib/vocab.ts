@@ -1,23 +1,9 @@
 import "server-only";
 import { simbeeRaw } from "./simbee-raw";
+import type { components } from "./simbee-schema";
 
-export interface ClientTagDto {
-  id: string;
-  client_id: string;
-  category_id: string;
-  name: string;
-  system_tag_id?: string;
-  active?: boolean;
-}
-
-export interface ClientTopicDto {
-  id: string;
-  client_id: string;
-  category_id: string;
-  name: string;
-  system_topic_id?: string;
-  active?: boolean;
-}
+export type ClientTagDto = components["schemas"]["ClientTagDto"];
+export type ClientTopicDto = components["schemas"]["ClientTopicDto"];
 
 interface ListEnvelope<T> {
   data: T[];

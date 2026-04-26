@@ -6,15 +6,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "generate-schema": "openapi-typescript \"Simbee API.json\" -o src/lib/simbee-schema.ts"
   },
   "dependencies": {
     "@shroudb/sdk": "^2.6.2",
-    "@simbee-io/sdk": "^0.3.0",
     "@skeptik-io/herald-admin": "^5.0.1",
     "@skeptik-io/herald-chat-react": "^5.0.1",
     "@skeptik-io/herald-sdk": "^5.0.1",
     "next": "16.2.4",
+    "openapi-fetch": "^0.17.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "^0.0.1"
@@ -26,6 +27,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

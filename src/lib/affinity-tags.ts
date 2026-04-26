@@ -1,25 +1,16 @@
 import "server-only";
 import { simbeeRaw } from "./simbee-raw";
+import type { components } from "./simbee-schema";
 
-export interface AffinityTagDto {
-  id: string;
-  affinity_id: string;
-  tag_id: string;
-  tag_type: string;
-  visibility?: string;
-  association_type?: string;
-}
+export type AffinityTagDto = components["schemas"]["AffinityTagDto"];
+type UserDto = components["schemas"]["UserDto"];
 
+// Returned by the internal /affinity_tags summary endpoint that the public
+// spec doesn't model. Hand-rolled until it's promoted into the schema.
 interface AffinityTagSummaryDto {
   id: string;
   tag_type?: string;
   association_type?: string;
-}
-
-interface UserDto {
-  id: string;
-  client_id: string;
-  external_id: string;
 }
 
 interface ListEnvelope<T> {

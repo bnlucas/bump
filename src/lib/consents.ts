@@ -1,30 +1,11 @@
 import "server-only";
 import { simbeeRaw } from "./simbee-raw";
 import { ensureAffinity } from "./affinities";
+import type { components } from "./simbee-schema";
 
-export interface ConsentDto {
-  id: string;
-  client_user_id: string;
-  consent_type: string;
-  granted_at: string;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface ConsentLayerDto {
-  id: string;
-  client_id: string;
-  key: string;
-  consent_layer_id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-
-interface UserDto {
-  id: string;
-  client_id: string;
-  external_id: string;
-}
+export type ConsentDto = components["schemas"]["ConsentDto"];
+export type ConsentLayerDto = components["schemas"]["ClientConsentLayerDto"];
+type UserDto = components["schemas"]["UserDto"];
 
 interface Envelope<T> {
   data: T;

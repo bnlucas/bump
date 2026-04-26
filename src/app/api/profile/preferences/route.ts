@@ -4,7 +4,7 @@ import { simbee, type components } from "@/lib/simbee";
 
 export const dynamic = "force-dynamic";
 
-type Preferences = components["schemas"]["DiscoveryUpdateMatchPreferences"];
+type Preferences = components["schemas"]["UpdateMatchPreferences"];
 
 const STRING_LIST_KEYS = ["preferred_genders", "preferred_connections", "connection_types"] as const;
 

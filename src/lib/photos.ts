@@ -2,13 +2,9 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { simbeeRaw } from "./simbee-raw";
 import { shroudb } from "./shroudb";
+import type { components } from "./simbee-schema";
 
-interface UserDto {
-  id: string;
-  client_id: string;
-  external_id: string;
-  traits?: Record<string, unknown>;
-}
+type UserDto = components["schemas"]["UserDto"];
 
 interface Envelope<T> {
   data: T;

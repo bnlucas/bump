@@ -1,17 +1,26 @@
 import "server-only";
-import { SimbeeClient } from "@simbee-io/sdk";
+import createClient, { type Client } from "openapi-fetch";
 import { env } from "./env";
+import type { paths } from "./simbee-schema";
 
-let instance: SimbeeClient | null = null;
+const DEFAULT_HOST = "https://api.simbee.io";
 
-export function simbee(): SimbeeClient {
+let instance: Client<paths> | null = null;
+
+export function simbee(): { fetch: Client<paths> } {
   if (!instance) {
-    instance = new SimbeeClient({
-      apiKey: env.simbee.apiKey,
-      host: env.simbee.host,
+    const apiKey = env.simbee.apiKey;
+    const baseUrl = env.simbee.host ?? DEFAULT_HOST;
+    const client = createClient<paths>({ baseUrl });
+    client.use({
+      onRequest: ({ request }) => {
+        request.headers.set("Authorization", `Bearer ${apiKey}`);
+        return request;
+      },
     });
+    instance = client;
   }
-  return instance;
+  return { fetch: instance };
 }
 
-export type { paths, components } from "@simbee-io/sdk";
+export type { paths, components } from "./simbee-schema";
