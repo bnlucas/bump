@@ -291,14 +291,14 @@ export function ProfileEditor({
       <hr className="border-[color:var(--border)]" />
 
       <div>
-        <h2 className="mb-1 text-sm font-semibold">Consent</h2>
+        <h2 className="mb-1 text-sm font-semibold">What you&rsquo;re here for</h2>
         <p className="mb-3 text-xs text-[color:var(--muted-foreground)]">
-          Each consent layer is a context (e.g. dating, friendship) for which
-          you allow Simbee to compute matches and let others reach out.
+          Choose which spaces you want to be matched in. You can turn each on or
+          off any time.
         </p>
         {consentLayers.length === 0 ? (
           <p className="text-sm text-[color:var(--muted-foreground)]">
-            No consent layers configured for this tenant.
+            Nothing available yet.
           </p>
         ) : (
           <ul className="divide-y divide-[color:var(--border)] rounded-2xl border border-[color:var(--border)]">
@@ -351,12 +351,12 @@ export function ProfileEditor({
       <div>
         <h2 className="mb-1 text-sm font-semibold">Interests</h2>
         <p className="mb-3 text-xs text-[color:var(--muted-foreground)]">
-          Tap to add tags from your tenant&rsquo;s vocabulary. Simbee uses these
-          to score who you&rsquo;ll see in Discover.
+          Tap what you&rsquo;re into. The more you pick, the better the people
+          you&rsquo;ll see.
         </p>
         {vocab.length === 0 ? (
           <p className="text-sm text-[color:var(--muted-foreground)]">
-            No vocabulary tags configured for this tenant.
+            Nothing here yet.
           </p>
         ) : (
           <ul className="flex flex-wrap gap-2">
@@ -393,11 +393,11 @@ export function ProfileEditor({
       <hr className="border-[color:var(--border)]" />
 
       <div>
-        <h2 className="mb-1 text-sm font-semibold">Topics</h2>
+        <h2 className="mb-1 text-sm font-semibold">What you bring &amp; what you want</h2>
         <p className="mb-3 text-xs text-[color:var(--muted-foreground)]">
-          Topics with a preference and role drive Simbee&rsquo;s compatibility
-          scoring — e.g. {`"into climbing as receiver"`} matches well with
-          {` "into climbing as giver"`}.
+          Add a thing you&rsquo;re into and how you show up around it. Pairs
+          like &ldquo;into climbing — leading&rdquo; and &ldquo;into climbing —
+          following&rdquo; find each other.
         </p>
 
         {topicEntries.length > 0 ? (
@@ -438,8 +438,7 @@ export function ProfileEditor({
 
         {topicVocab.length === 0 || preferences.length === 0 ? (
           <p className="text-sm text-[color:var(--muted-foreground)]">
-            Topics need both a vocabulary and at least one configured affinity
-            preference. Ask your tenant admin to provision them.
+            Nothing to add yet — check back soon.
           </p>
         ) : (
           <form onSubmit={addTopic} className="space-y-3">
@@ -532,11 +531,6 @@ export function ProfileEditor({
 
       <hr className="border-[color:var(--border)]" />
 
-      <dl className="space-y-2 text-sm">
-        <Row label="External ID" value={initial.external_id} mono />
-        <Row label="Cluster" value={initial.cluster_id ?? "—"} />
-      </dl>
-
       <button
         type="button"
         onClick={signOut}
@@ -555,15 +549,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="mb-1 block text-sm font-medium">{label}</span>
       {children}
     </label>
-  );
-}
-
-function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-[color:var(--muted-foreground)]">{label}</dt>
-      <dd className={mono ? "font-mono text-xs break-all" : ""}>{value}</dd>
-    </div>
   );
 }
 

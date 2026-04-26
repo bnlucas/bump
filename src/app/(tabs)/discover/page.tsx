@@ -22,14 +22,13 @@ export default async function DiscoverPage() {
         <ScreenHeader title="Discover" />
         <section className="px-4 py-10 text-center">
           <p className="mb-4 text-sm text-[color:var(--muted-foreground)]">
-            Discover is contextual. Grant a consent layer in your profile to
-            start matching.
+            Tell us what you&rsquo;re here for and we&rsquo;ll start finding people.
           </p>
           <Link
             href="/profile"
             className="inline-block rounded-full bg-[color:var(--accent)] px-5 py-2.5 text-sm font-semibold text-[color:var(--accent-foreground)]"
           >
-            Open profile
+            Set up your profile
           </Link>
         </section>
       </>
@@ -43,7 +42,7 @@ export default async function DiscoverPage() {
 
   return (
     <>
-      <ScreenHeader title="Discover" subtitle={`Context: ${activeContext}`} />
+      <ScreenHeader title="Discover" />
       <SwipeDeck
         initial={candidates}
         contexts={grantedKeys}

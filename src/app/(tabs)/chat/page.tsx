@@ -14,12 +14,12 @@ export default async function ChatPage() {
 
   return (
     <>
-      <ScreenHeader title="Chat" subtitle={`${conversations.length} conversations`} />
+      <ScreenHeader title="Messages" />
       <section className="px-4 py-4">
         {conversations.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[color:var(--border)] p-8 text-center text-[color:var(--muted-foreground)]">
             <p className="text-sm">
-              No conversations yet. Connect with someone in Discover to start one.
+              No messages yet. Say hi to someone in Discover to get started.
             </p>
           </div>
         ) : (
@@ -32,10 +32,7 @@ export default async function ChatPage() {
                 >
                   <div className="min-w-0">
                     <p className="truncate font-medium">
-                      {c.display_name ?? c.counterpart_id}
-                    </p>
-                    <p className="truncate font-mono text-xs text-[color:var(--muted-foreground)]">
-                      {Math.round(c.score * 100)}% · {c.stream_id}
+                      {c.display_name ?? "Someone you matched with"}
                     </p>
                   </div>
                   <span aria-hidden className="text-[color:var(--muted-foreground)]">

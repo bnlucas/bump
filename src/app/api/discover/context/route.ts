@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     const granted = await listConsents(session.externalId);
     if (!granted.some((c) => c.consent_type === layerKey)) {
       return NextResponse.json(
-        { error: "Cannot switch to a context you have not granted." },
+        { error: "Turn this on in your profile first." },
         { status: 403 },
       );
     }

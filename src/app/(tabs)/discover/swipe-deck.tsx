@@ -99,32 +99,21 @@ export function SwipeDeck({
 
       {!top ? (
         <div className="rounded-2xl border border-dashed border-[color:var(--border)] p-8 text-center text-[color:var(--muted-foreground)]">
-          <p className="text-sm">
-            No candidates in <strong>{activeContext}</strong> yet.
-          </p>
+          <p className="text-sm">No one new for now. Check back soon.</p>
         </div>
       ) : (
         <>
           <article className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--muted)] p-6 shadow-sm">
-            <div className="flex items-baseline justify-between">
-              <h2 className="text-xl font-semibold tracking-tight">
-                {top.display_name ?? "Someone interesting"}
-              </h2>
-              <span className="text-xs font-mono text-[color:var(--muted-foreground)]">
-                {Math.round(top.score * 100)}%
-              </span>
-            </div>
+            <h2 className="text-xl font-semibold tracking-tight">
+              {top.display_name ?? "Someone interesting"}
+            </h2>
             {top.bio ? (
               <p className="mt-3 whitespace-pre-line text-sm">{top.bio}</p>
-            ) : (
-              <p className="mt-3 text-sm italic text-[color:var(--muted-foreground)]">
-                No bio yet.
-              </p>
-            )}
+            ) : null}
             {top.explanation.length > 0 ? (
               <ul className="mt-4 space-y-1 text-xs text-[color:var(--muted-foreground)]">
                 {top.explanation.slice(0, 3).map((e, i) => (
-                  <li key={i}>· {e}</li>
+                  <li key={i}>{e}</li>
                 ))}
               </ul>
             ) : null}
@@ -155,9 +144,11 @@ export function SwipeDeck({
             </button>
           </div>
 
-          <p className="text-center text-xs text-[color:var(--muted-foreground)]">
-            {queue.length - 1} more in queue
-          </p>
+          {queue.length > 1 ? (
+            <p className="text-center text-xs text-[color:var(--muted-foreground)]">
+              {queue.length - 1} more
+            </p>
+          ) : null}
         </>
       )}
     </section>

@@ -3,10 +3,12 @@ import Link from "next/link";
 import { currentSession } from "@/lib/auth/session";
 import { heraldAdmin } from "@/lib/herald-admin";
 import { mintHeraldToken } from "@/lib/herald-token";
-import { messagingAllowed } from "@/lib/match";
+import { messagingAllowed, userBasic } from "@/lib/match";
 import { ChatRoom } from "./chat-room";
 
 export const dynamic = "force-dynamic";
+
+const FALLBACK_NAME = "Someone you matched with";
 
 export default async function ChatStreamPage({
   params,
@@ -23,18 +25,16 @@ export default async function ChatStreamPage({
   const isMember = members.some((m) => m.user_id === session.externalId);
   if (!isMember) redirect("/chat");
 
-  const counterpart = members.find((m) => m.user_id !== session.externalId)?.user_id ?? null;
+  const counterpartId =
+    members.find((m) => m.user_id !== session.externalId)?.user_id ?? null;
+  const counterpartName = counterpartId
+    ? ((await userBasic(counterpartId))?.display_name ?? FALLBACK_NAME)
+    : FALLBACK_NAME;
 
-  if (counterpart) {
-    const permission = await messagingAllowed(session.externalId, counterpart);
+  if (counterpartId) {
+    const permission = await messagingAllowed(session.externalId, counterpartId);
     if (!permission.allowed) {
-      return (
-        <PermissionDenied
-          streamId={streamId}
-          counterpart={counterpart}
-          reason={permission.reason ?? null}
-        />
-      );
+      return <PermissionDenied counterpartName={counterpartName} />;
     }
   }
 
@@ -42,67 +42,38 @@ export default async function ChatStreamPage({
 
   return (
     <div className="flex h-dvh flex-col">
-      <header
-        className="flex items-center gap-3 border-b border-[color:var(--border)] bg-[color:var(--background)] px-4"
-        style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)", paddingBottom: "0.75rem" }}
-      >
-        <Link
-          href="/chat"
-          className="text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
-          aria-label="Back to chat list"
-        >
-          ‹
-        </Link>
-        <div className="min-w-0">
-          <h1 className="truncate text-base font-semibold">
-            {counterpart ?? "(no other member)"}
-          </h1>
-          <p className="truncate font-mono text-[10px] text-[color:var(--muted-foreground)]">
-            {streamId}
-          </p>
-        </div>
-      </header>
+      <ChatHeader title={counterpartName} />
       <ChatRoom creds={creds} streamId={streamId} />
     </div>
   );
 }
 
-function PermissionDenied({
-  streamId,
-  counterpart,
-  reason,
-}: {
-  streamId: string;
-  counterpart: string;
-  reason: string | null;
-}) {
+function ChatHeader({ title }: { title: string }) {
+  return (
+    <header
+      className="flex items-center gap-3 border-b border-[color:var(--border)] bg-[color:var(--background)] px-4"
+      style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)", paddingBottom: "0.75rem" }}
+    >
+      <Link
+        href="/chat"
+        className="text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
+        aria-label="Back"
+      >
+        ‹
+      </Link>
+      <h1 className="min-w-0 truncate text-base font-semibold">{title}</h1>
+    </header>
+  );
+}
+
+function PermissionDenied({ counterpartName }: { counterpartName: string }) {
   return (
     <div className="flex min-h-dvh flex-col">
-      <header
-        className="flex items-center gap-3 border-b border-[color:var(--border)] bg-[color:var(--background)] px-4"
-        style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)", paddingBottom: "0.75rem" }}
-      >
-        <Link
-          href="/chat"
-          className="text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
-          aria-label="Back to chat list"
-        >
-          ‹
-        </Link>
-        <div className="min-w-0">
-          <h1 className="truncate text-base font-semibold">{counterpart}</h1>
-          <p className="truncate font-mono text-[10px] text-[color:var(--muted-foreground)]">
-            {streamId}
-          </p>
-        </div>
-      </header>
+      <ChatHeader title={counterpartName} />
       <section className="flex flex-1 items-center justify-center px-6 text-center">
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Messaging is not permitted right now.</p>
-          {reason ? (
-            <p className="text-sm text-[color:var(--muted-foreground)]">{reason}</p>
-          ) : null}
-        </div>
+        <p className="text-sm text-[color:var(--muted-foreground)]">
+          You can&rsquo;t message here right now.
+        </p>
       </section>
     </div>
   );
