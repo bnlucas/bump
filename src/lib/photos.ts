@@ -1,21 +1,14 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { simbeeRaw } from "./simbee-raw";
+import { simbee } from "./simbee";
 import { shroudb } from "./shroudb";
-import type { components } from "./simbee-schema";
-
-type UserDto = components["schemas"]["UserDto"];
-
-interface Envelope<T> {
-  data: T;
-}
 
 const TRAITS_KEY = "photo_ids";
 
 async function readTraits(externalId: string): Promise<Record<string, unknown>> {
-  const res = await simbeeRaw<Envelope<UserDto>>(
-    `/api/v1/users/${encodeURIComponent(externalId)}`,
-  );
+  const res = await simbee().fetch.GET("/api/v1/users/{external_id}", {
+    params: { path: { external_id: externalId } },
+  });
   return (res.data?.data?.traits ?? {}) as Record<string, unknown>;
 }
 
@@ -23,9 +16,9 @@ async function writeTraits(
   externalId: string,
   traits: Record<string, unknown>,
 ): Promise<void> {
-  await simbeeRaw(`/api/v1/users/${encodeURIComponent(externalId)}`, {
-    method: "PUT",
-    body: JSON.stringify({ traits }),
+  await simbee().fetch.PUT("/api/v1/users/{external_id}", {
+    params: { path: { external_id: externalId } },
+    body: { traits: traits as unknown as Record<string, never> },
   });
 }
 

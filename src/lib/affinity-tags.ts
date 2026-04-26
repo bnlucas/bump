@@ -1,9 +1,9 @@
 import "server-only";
+import { simbee } from "./simbee";
 import { simbeeRaw } from "./simbee-raw";
 import type { components } from "./simbee-schema";
 
 export type AffinityTagDto = components["schemas"]["AffinityTagDto"];
-type UserDto = components["schemas"]["UserDto"];
 
 // Returned by the internal /affinity_tags summary endpoint that the public
 // spec doesn't model. Hand-rolled until it's promoted into the schema.
@@ -17,25 +17,22 @@ interface ListEnvelope<T> {
   data: T[];
 }
 
-interface Envelope<T> {
-  data: T;
-}
-
 async function resolveSimbeeIds(
   externalId: string,
 ): Promise<{ client_id: string; user_id: string } | null> {
-  const res = await simbeeRaw<Envelope<UserDto>>(
-    `/api/v1/users/${encodeURIComponent(externalId)}`,
-  );
-  if (!res.ok || !res.data?.data) return null;
-  return { client_id: res.data.data.client_id, user_id: res.data.data.id };
+  const res = await simbee().fetch.GET("/api/v1/users/{external_id}", {
+    params: { path: { external_id: externalId } },
+  });
+  const user = res.data?.data;
+  if (!user) return null;
+  return { client_id: user.client_id, user_id: user.id };
 }
 
 /** Best-effort: returns the user's currently-attached affinity tag *vocab IDs*.
- *  The internal endpoint returns AffinityTagSummaryDto which we read as
- *  vocab tag ids (the field is named `id`, but in summary context it is the
- *  tag_id). If the shape doesn't match expectations or the call fails, we
- *  return an empty list and let the UI converge via writes. */
+ *  The internal endpoint isn't in the public spec, so this stays on simbeeRaw.
+ *  Summary's `id` is interpreted as the vocab tag id; if the shape doesn't
+ *  match expectations the call fails and we return an empty list, letting the
+ *  UI converge via writes. */
 export async function listAttachedTagIds(
   externalId: string,
   consentLayerId?: string,
@@ -57,22 +54,25 @@ export async function addAffinityTag(
   tag_id: string,
   tag_type = "client",
 ): Promise<AffinityTagDto | null> {
-  const res = await simbeeRaw<Envelope<AffinityTagDto>>(
-    `/api/v1/users/${encodeURIComponent(externalId)}/affinity/tags`,
-    { method: "POST", body: JSON.stringify({ tag_id, tag_type }) },
+  const res = await simbee().fetch.POST(
+    "/api/v1/users/{external_id}/affinity/tags",
+    {
+      params: { path: { external_id: externalId } },
+      body: { tag_id, tag_type },
+    },
   );
-  return res.ok ? (res.data?.data ?? null) : null;
+  return (res.data?.data as AffinityTagDto | undefined) ?? null;
 }
 
 export async function removeAffinityTag(
   externalId: string,
   affinityTagId: string,
 ): Promise<boolean> {
-  const res = await simbeeRaw(
-    `/api/v1/users/${encodeURIComponent(externalId)}/affinity/tags/${encodeURIComponent(
-      affinityTagId,
-    )}`,
-    { method: "DELETE" },
+  const res = await simbee().fetch.DELETE(
+    "/api/v1/users/{external_id}/affinity/tags/{id}",
+    {
+      params: { path: { external_id: externalId, id: affinityTagId } },
+    },
   );
-  return res.ok;
+  return res.response.ok;
 }

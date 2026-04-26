@@ -1,48 +1,35 @@
 import "server-only";
-import { simbeeRaw } from "./simbee-raw";
+import { simbee } from "./simbee";
 import { ensureAffinity } from "./affinities";
 import type { components } from "./simbee-schema";
 
 export type ConsentDto = components["schemas"]["ConsentDto"];
 export type ConsentLayerDto = components["schemas"]["ClientConsentLayerDto"];
-type UserDto = components["schemas"]["UserDto"];
-
-interface Envelope<T> {
-  data: T;
-}
-
-interface ListEnvelope<T> {
-  data: T[];
-}
 
 async function resolveSimbeeIds(
   externalId: string,
 ): Promise<{ client_id: string; user_id: string } | null> {
-  const res = await simbeeRaw<Envelope<UserDto>>(
-    `/api/v1/users/${encodeURIComponent(externalId)}`,
-  );
-  if (!res.ok || !res.data?.data) return null;
-  return { client_id: res.data.data.client_id, user_id: res.data.data.id };
+  const res = await simbee().fetch.GET("/api/v1/users/{external_id}", {
+    params: { path: { external_id: externalId } },
+  });
+  const user = res.data?.data;
+  if (!user) return null;
+  return { client_id: user.client_id, user_id: user.id };
 }
 
 export async function listConsents(externalId: string): Promise<ConsentDto[]> {
   const ids = await resolveSimbeeIds(externalId);
   if (!ids) return [];
-  const res = await simbeeRaw<ListEnvelope<ConsentDto>>(
-    `/api/v1/clients/${encodeURIComponent(ids.client_id)}/users/${encodeURIComponent(
-      ids.user_id,
-    )}/consents`,
+  const res = await simbee().fetch.GET(
+    "/api/v1/clients/{client_id}/users/{user_id}/consents",
+    { params: { path: { client_id: ids.client_id, user_id: ids.user_id } } },
   );
-  if (!res.ok) return [];
-  return res.data?.data ?? [];
+  return (res.data?.data ?? []) as ConsentDto[];
 }
 
 export async function listConsentLayers(): Promise<ConsentLayerDto[]> {
-  const res = await simbeeRaw<ListEnvelope<ConsentLayerDto>>(
-    "/api/v1/config/consent_layers",
-  );
-  if (!res.ok) return [];
-  return res.data?.data ?? [];
+  const res = await simbee().fetch.GET("/api/v1/config/consent_layers");
+  return (res.data?.data ?? []) as ConsentLayerDto[];
 }
 
 export async function grantConsent(
@@ -51,13 +38,15 @@ export async function grantConsent(
 ): Promise<ConsentDto | null> {
   const ids = await resolveSimbeeIds(externalId);
   if (!ids) return null;
-  const res = await simbeeRaw<Envelope<ConsentDto>>(
-    `/api/v1/clients/${encodeURIComponent(ids.client_id)}/users/${encodeURIComponent(
-      ids.user_id,
-    )}/consents`,
-    { method: "POST", body: JSON.stringify({ consent_type }) },
+  const res = await simbee().fetch.POST(
+    "/api/v1/clients/{client_id}/users/{user_id}/consents",
+    {
+      params: { path: { client_id: ids.client_id, user_id: ids.user_id } },
+      body: { consent_type },
+    },
   );
-  if (!res.ok || !res.data?.data) return null;
+  const consent = (res.data?.data as ConsentDto | undefined) ?? null;
+  if (!consent) return null;
 
   // Each consent layer gets its own affinity — the user's interest profile
   // for that context. We resolve the layer by key so matches can compute.
@@ -66,7 +55,7 @@ export async function grantConsent(
     await ensureAffinity(externalId, layer.id).catch(() => null);
   }
 
-  return res.data.data;
+  return consent;
 }
 
 export async function revokeConsent(
@@ -75,11 +64,13 @@ export async function revokeConsent(
 ): Promise<boolean> {
   const ids = await resolveSimbeeIds(externalId);
   if (!ids) return false;
-  const res = await simbeeRaw(
-    `/api/v1/clients/${encodeURIComponent(ids.client_id)}/users/${encodeURIComponent(
-      ids.user_id,
-    )}/consents/${encodeURIComponent(consentId)}`,
-    { method: "DELETE" },
+  const res = await simbee().fetch.DELETE(
+    "/api/v1/clients/{client_id}/users/{user_id}/consents/{id}",
+    {
+      params: {
+        path: { client_id: ids.client_id, user_id: ids.user_id, id: consentId },
+      },
+    },
   );
-  return res.ok;
+  return res.response.ok;
 }

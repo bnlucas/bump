@@ -1,5 +1,5 @@
 import "server-only";
-import { simbeeRaw } from "./simbee-raw";
+import { simbee } from "./simbee";
 import type { components } from "./simbee-schema";
 
 export type MatchPreferences = components["schemas"]["MatchPreferencesDto"];
@@ -7,8 +7,9 @@ export type MatchPreferences = components["schemas"]["MatchPreferencesDto"];
 export async function loadMatchPreferences(
   externalId: string,
 ): Promise<MatchPreferences> {
-  const res = await simbeeRaw<{ data: MatchPreferences }>(
-    `/api/v1/users/${encodeURIComponent(externalId)}/match_preferences`,
+  const res = await simbee().fetch.GET(
+    "/api/v1/users/{external_id}/match_preferences",
+    { params: { path: { external_id: externalId } } },
   );
-  return res.ok && res.data?.data ? res.data.data : {};
+  return (res.data?.data ?? {}) as MatchPreferences;
 }

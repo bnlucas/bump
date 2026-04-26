@@ -1,8 +1,5 @@
 import "server-only";
-import { simbeeRaw } from "./simbee-raw";
-import type { components } from "./simbee-schema";
-
-type UserDto = components["schemas"]["UserDto"];
+import { simbee } from "./simbee";
 
 const externalToInternal = new Map<string, string>();
 
@@ -11,10 +8,10 @@ export async function resolveInternalUserId(
 ): Promise<string | null> {
   const cached = externalToInternal.get(externalId);
   if (cached) return cached;
-  const res = await simbeeRaw<{ data: UserDto }>(
-    `/api/v1/users/${encodeURIComponent(externalId)}`,
-  );
-  const id = res.ok ? res.data?.data?.id : null;
+  const res = await simbee().fetch.GET("/api/v1/users/{external_id}", {
+    params: { path: { external_id: externalId } },
+  });
+  const id = res.data?.data?.id ?? null;
   if (id) externalToInternal.set(externalId, id);
-  return id ?? null;
+  return id;
 }

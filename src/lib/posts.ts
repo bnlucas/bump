@@ -1,9 +1,10 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { simbeeRaw } from "./simbee-raw";
+import { simbee } from "./simbee";
 import { shroudb } from "./shroudb";
 import { sigil, SIGIL_USER_SCHEMA } from "./sigil";
 import { resolveInternalUserId } from "./simbee-user";
+import type { components } from "./simbee-schema";
 
 const POSTS_NAMESPACE = process.env.SHROUDB_POSTS_NAMESPACE ?? "posts";
 const COMMENTS_NAMESPACE = process.env.SHROUDB_COMMENTS_NAMESPACE ?? "comments";
@@ -11,32 +12,8 @@ const POST_CONTENT_TYPE = "post";
 const POST_VISIBILITY = "public";
 const SIGNAL_KEY_LIKE = process.env.SIMBEE_SIGNAL_KEY_LIKE ?? "like";
 
-interface ContentItemDto {
-  id: string;
-  client_id: string;
-  author_id: string;
-  external_id: string;
-  content_type: string;
-  visibility: string;
-  engagements_count?: number;
-  published_at?: string;
-}
-
-interface EngagementDto {
-  id: string;
-  user_id: string;
-  content_item_id: string;
-  signal_type_id: string;
-  created_at?: string;
-}
-
-interface ListEnvelope<T> {
-  data: T[];
-}
-
-interface Envelope<T> {
-  data: T;
-}
+type ContentItemDto = components["schemas"]["ContentItemDto"];
+type EngagementDto = components["schemas"]["EngagementDto"];
 
 const namespacesEnsured = new Set<string>();
 
@@ -95,11 +72,17 @@ async function findUserLike(
   contentId: string,
   internalUserId: string,
 ): Promise<string | null> {
-  const res = await simbeeRaw<ListEnvelope<EngagementDto>>(
-    `/api/v1/content/${encodeURIComponent(contentId)}/engagements?type=${encodeURIComponent(SIGNAL_KEY_LIKE)}`,
+  const res = await simbee().fetch.GET(
+    "/api/v1/content/{content_id}/engagements",
+    {
+      params: {
+        path: { content_id: contentId },
+        query: { type: SIGNAL_KEY_LIKE },
+      },
+    },
   );
-  if (!res.ok) return null;
-  return (res.data?.data ?? []).find((e) => e.user_id === internalUserId)?.id ?? null;
+  const list = (res.data?.data ?? []) as EngagementDto[];
+  return list.find((e) => e.user_id === internalUserId)?.id ?? null;
 }
 
 async function hydrate(
@@ -133,13 +116,12 @@ export async function listPosts(
   limit = 20,
 ): Promise<PostView[]> {
   const [res, viewerInternalId] = await Promise.all([
-    simbeeRaw<ListEnvelope<ContentItemDto>>(
-      `/api/v1/content?limit=${limit}&content_type=${encodeURIComponent(POST_CONTENT_TYPE)}`,
-    ),
+    simbee().fetch.GET("/api/v1/content", {
+      params: { query: { limit, content_type: POST_CONTENT_TYPE } },
+    }),
     viewerExternalId ? resolveInternalUserId(viewerExternalId) : Promise.resolve(null),
   ]);
-  if (!res.ok) return [];
-  const items = res.data?.data ?? [];
+  const items = (res.data?.data ?? []) as ContentItemDto[];
   const hydrated = await Promise.all(items.map((i) => hydrate(i, viewerInternalId)));
   return hydrated.filter((p): p is PostView => p !== null);
 }
@@ -171,23 +153,23 @@ export async function createPost(
     } satisfies StoredBody),
   );
 
-  const res = await simbeeRaw<Envelope<ContentItemDto>>("/api/v1/content", {
-    method: "POST",
-    body: JSON.stringify({
+  const res = await simbee().fetch.POST("/api/v1/content", {
+    body: {
       author_external_id: authorExternalId,
       external_id: externalId,
       content_type: POST_CONTENT_TYPE,
       visibility: POST_VISIBILITY,
       published_at: new Date().toISOString(),
-    }),
+    },
   });
 
-  if (!res.ok || !res.data?.data) {
+  const created = res.data?.data as ContentItemDto | undefined;
+  if (!created) {
     await shroudb().shroudb.delete(POSTS_NAMESPACE, externalId).catch(() => {});
     return null;
   }
   // The post we just created can't have a like yet; skip the lookup.
-  return hydrate(res.data.data, null);
+  return hydrate(created, null);
 }
 
 export interface LikeResult {
@@ -198,31 +180,28 @@ export async function addLike(
   contentId: string,
   userExternalId: string,
 ): Promise<LikeResult | null> {
-  const res = await simbeeRaw<Envelope<EngagementDto>>(
-    `/api/v1/content/${encodeURIComponent(contentId)}/engagements`,
+  const res = await simbee().fetch.POST(
+    "/api/v1/content/{content_id}/engagements",
     {
-      method: "POST",
-      body: JSON.stringify({
-        user_external_id: userExternalId,
-        type: SIGNAL_KEY_LIKE,
-      }),
+      params: { path: { content_id: contentId } },
+      body: { user_external_id: userExternalId, type: SIGNAL_KEY_LIKE },
     },
   );
-  if (!res.ok || !res.data?.data) return null;
-  return { engagement_id: res.data.data.id };
+  const created = res.data?.data as EngagementDto | undefined;
+  return created ? { engagement_id: created.id } : null;
 }
 
 export async function removeLike(
   contentId: string,
   engagementId: string,
 ): Promise<boolean> {
-  const res = await simbeeRaw(
-    `/api/v1/content/${encodeURIComponent(contentId)}/engagements/${encodeURIComponent(
-      engagementId,
-    )}`,
-    { method: "DELETE" },
+  const res = await simbee().fetch.DELETE(
+    "/api/v1/content/{content_id}/engagements/{engagement_id}",
+    {
+      params: { path: { content_id: contentId, engagement_id: engagementId } },
+    },
   );
-  return res.ok;
+  return res.response.ok;
 }
 
 

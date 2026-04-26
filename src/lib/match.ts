@@ -1,6 +1,5 @@
 import "server-only";
 import { simbee, type components } from "./simbee";
-import { simbeeRaw } from "./simbee-raw";
 import { sigil, SIGIL_USER_SCHEMA } from "./sigil";
 import { heraldAdmin } from "./herald-admin";
 import {
@@ -35,14 +34,6 @@ export interface ConversationSummary {
   primary_photo_id: string | null;
   score: number;
   matched_at: string | null;
-}
-
-interface PermissionEnvelope {
-  data?: { allowed?: boolean; reason?: string };
-}
-
-interface UserEnvelope {
-  data?: { external_id: string; traits?: Record<string, unknown> };
 }
 
 export function streamIdForPair(a: string, b: string): string {
@@ -121,15 +112,19 @@ export async function recordSwipe(
 }
 
 export async function messagingAllowed(meId: string, themId: string): Promise<Permission> {
-  const res = await simbeeRaw<PermissionEnvelope>(
-    `/api/v1/users/${encodeURIComponent(meId)}/messages/check/${encodeURIComponent(themId)}`,
+  const res = await simbee().fetch.GET(
+    "/api/v1/users/{external_id}/messages/check/{recipient_external_id}",
+    {
+      params: {
+        path: { external_id: meId, recipient_external_id: themId },
+      },
+    },
   );
-  if (!res.ok || !res.data?.data) {
-    return { allowed: false, reason: "Permission check failed." };
-  }
+  const permission = res.data?.data;
+  if (!permission) return { allowed: false, reason: "Permission check failed." };
   return {
-    allowed: Boolean(res.data.data.allowed),
-    reason: res.data.data.reason,
+    allowed: Boolean(permission.allowed),
+    reason: permission.reason,
   };
 }
 
@@ -217,15 +212,16 @@ export async function userBasic(externalId: string): Promise<{
   display_name: string | null;
   primary_photo_id: string | null;
 } | null> {
-  const userRes = await simbeeRaw<UserEnvelope>(
-    `/api/v1/users/${encodeURIComponent(externalId)}`,
-  );
-  if (!userRes.ok || !userRes.data?.data) return null;
+  const userRes = await simbee().fetch.GET("/api/v1/users/{external_id}", {
+    params: { path: { external_id: externalId } },
+  });
+  const user = userRes.data?.data;
+  if (!user) return null;
   const envelope = await sigil()
     .userGet(SIGIL_USER_SCHEMA, externalId)
     .catch(() => null);
   const fields = (envelope?.fields ?? {}) as Record<string, unknown>;
-  const traits = (userRes.data.data.traits ?? {}) as Record<string, unknown>;
+  const traits = (user.traits ?? {}) as Record<string, unknown>;
   return {
     external_id: externalId,
     display_name: typeof fields.display_name === "string" ? fields.display_name : null,

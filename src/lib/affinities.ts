@@ -1,33 +1,25 @@
 import "server-only";
-import { simbeeRaw } from "./simbee-raw";
+import { simbee } from "./simbee";
 import type { components } from "./simbee-schema";
 
 export type AffinityDto = components["schemas"]["AffinityDto"];
 
-interface ListEnvelope<T> {
-  data: T[];
-}
-
-interface Envelope<T> {
-  data: T;
-}
-
 export async function listAffinities(externalId: string): Promise<AffinityDto[]> {
-  const res = await simbeeRaw<ListEnvelope<AffinityDto>>(
-    `/api/v1/users/${encodeURIComponent(externalId)}/affinity`,
-  );
-  return res.ok ? (res.data?.data ?? []) : [];
+  const res = await simbee().fetch.GET("/api/v1/users/{external_id}/affinity", {
+    params: { path: { external_id: externalId } },
+  });
+  return (res.data?.data ?? []) as AffinityDto[];
 }
 
 export async function createAffinity(
   externalId: string,
   consent_layer_id: string,
 ): Promise<AffinityDto | null> {
-  const res = await simbeeRaw<Envelope<AffinityDto>>(
-    `/api/v1/users/${encodeURIComponent(externalId)}/affinity`,
-    { method: "POST", body: JSON.stringify({ consent_layer_id }) },
-  );
-  return res.ok ? (res.data?.data ?? null) : null;
+  const res = await simbee().fetch.POST("/api/v1/users/{external_id}/affinity", {
+    params: { path: { external_id: externalId } },
+    body: { consent_layer_id },
+  });
+  return (res.data?.data as AffinityDto | undefined) ?? null;
 }
 
 export async function ensureAffinity(
