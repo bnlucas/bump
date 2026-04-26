@@ -1,14 +1,21 @@
+import { redirect } from "next/navigation";
 import { ScreenHeader } from "@/components/screen-header";
+import { currentSession } from "@/lib/auth/session";
+import { listPosts } from "@/lib/posts";
+import { CommunityFeed } from "./feed";
 
-export default function CommunitiesPage() {
+export const dynamic = "force-dynamic";
+
+export default async function CommunitiesPage() {
+  const session = await currentSession();
+  if (!session) redirect("/auth");
+
+  const posts = await listPosts();
+
   return (
     <>
-      <ScreenHeader title="Communities" subtitle="Threads and live rooms" />
-      <section className="px-4 py-6">
-        <div className="rounded-2xl border border-dashed border-[color:var(--border)] p-8 text-center text-[color:var(--muted-foreground)]">
-          <p className="text-sm">Coming soon.</p>
-        </div>
-      </section>
+      <ScreenHeader title="Communities" />
+      <CommunityFeed initial={posts} userId={session.externalId} />
     </>
   );
 }
