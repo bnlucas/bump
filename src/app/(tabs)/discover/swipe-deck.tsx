@@ -126,6 +126,8 @@ export function SwipeDeck({
               <img
                 src={`/api/photos/${encodeURIComponent(top.primary_photo_id)}`}
                 alt={top.display_name ?? "Photo"}
+                loading="eager"
+                decoding="async"
                 className="aspect-[4/5] w-full object-cover"
               />
             ) : (

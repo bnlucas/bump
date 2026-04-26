@@ -80,6 +80,8 @@ export function PhotoGrid({
             <img
               src={`/api/photos/${encodeURIComponent(id)}`}
               alt={i === 0 ? "Your main photo" : `Photo ${i + 1}`}
+              loading={i === 0 ? "eager" : "lazy"}
+              decoding="async"
               className="h-full w-full object-cover"
             />
             <button

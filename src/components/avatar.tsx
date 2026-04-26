@@ -18,6 +18,10 @@ export function Avatar({
         <img
           src={`/api/photos/${encodeURIComponent(photoId)}`}
           alt=""
+          loading="lazy"
+          decoding="async"
+          width={size}
+          height={size}
           className="h-full w-full object-cover"
         />
       ) : (
