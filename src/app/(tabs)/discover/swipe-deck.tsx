@@ -21,6 +21,8 @@ export function SwipeDeck({
   const [pending, start] = useTransition();
   const [switching, startSwitch] = useTransition();
   const [optimisticContext, setOptimisticContext] = useState(activeContext);
+  const [computing, startCompute] = useTransition();
+  const [computeStatus, setComputeStatus] = useState<"idle" | "enqueued">("idle");
   const top = queue[0];
   const ANIM_MS = 250;
 
@@ -59,6 +61,20 @@ export function SwipeDeck({
           setError(data.reason ?? "This connection isn't permitted right now.");
         }
       }
+    });
+  }
+
+  function findMore() {
+    setError(null);
+    setComputeStatus("idle");
+    startCompute(async () => {
+      const res = await fetch("/api/discover/compute", { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data?.error ?? `Couldn't refresh (${res.status}).`);
+        return;
+      }
+      setComputeStatus("enqueued");
     });
   }
 
@@ -108,8 +124,22 @@ export function SwipeDeck({
       ) : null}
 
       {!top ? (
-        <div className="rounded-2xl border border-dashed border-[color:var(--border)] p-8 text-center text-[color:var(--muted-foreground)]">
-          <p className="text-sm">No one new for now. Check back soon.</p>
+        <div className="rounded-2xl border border-dashed border-[color:var(--border)] p-8 text-center">
+          <p className="text-sm text-[color:var(--muted-foreground)]">
+            {computeStatus === "enqueued"
+              ? "Working on it. Pull down to refresh in a moment."
+              : "No one new for now."}
+          </p>
+          {computeStatus !== "enqueued" ? (
+            <button
+              type="button"
+              onClick={findMore}
+              disabled={computing}
+              className="mt-4 inline-block rounded-full bg-[color:var(--accent)] px-5 py-2 text-sm font-semibold text-[color:var(--accent-foreground)] disabled:opacity-50"
+            >
+              {computing ? "…" : "Find more"}
+            </button>
+          ) : null}
         </div>
       ) : (
         <>

@@ -90,6 +90,25 @@ async function hydrateCandidate(m: MatchDto): Promise<Candidate> {
   };
 }
 
+export async function requestMatchCompute(
+  externalId: string,
+  layerKey: string,
+  limit = 50,
+): Promise<boolean> {
+  const layerId = await consentLayerId(layerKey);
+  if (!layerId) return false;
+  const res = await simbee().fetch.POST(
+    "/api/v1/users/{external_id}/matches/compute",
+    {
+      params: {
+        path: { external_id: externalId },
+        query: { consent_layer_id: layerId, limit },
+      },
+    },
+  );
+  return res.response.ok;
+}
+
 export async function recordSwipe(
   externalId: string,
   targetId: string,
