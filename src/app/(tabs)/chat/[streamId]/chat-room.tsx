@@ -107,17 +107,20 @@ function ChatLayout({ streamId, userId }: { streamId: string; userId: string }) 
 }
 
 function Bubble({ message, mine }: { message: Message; mine: boolean }) {
+  const pending = message.status === "sending";
+  const failed = message.status === "failed";
   return (
     <li
       className={`flex ${mine ? "justify-end" : "justify-start"}`}
       data-status={message.status}
     >
       <div
-        className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+        className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm transition-opacity ${
           mine
             ? "bg-[color:var(--accent)] text-[color:var(--accent-foreground)]"
             : "bg-[color:var(--muted)] text-[color:var(--foreground)]"
-        }`}
+        } ${pending ? "opacity-60" : ""} ${failed ? "ring-1 ring-red-500" : ""}`}
+        title={failed ? "Failed to send" : undefined}
       >
         {message.deleted ? (
           <span className="italic opacity-60">message deleted</span>
