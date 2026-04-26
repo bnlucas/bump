@@ -27,6 +27,7 @@ export function ProfileEditor({
   topicVocab,
   preferences,
   roles,
+  initialPhotoIds,
 }: {
   initial: Profile;
   initialConsents: ConsentDto[];
@@ -35,6 +36,7 @@ export function ProfileEditor({
   topicVocab: ClientTopicDto[];
   preferences: ClientAffinityPreferenceDto[];
   roles: ClientAffinityRoleDto[];
+  initialPhotoIds: string[];
 }) {
   const router = useRouter();
   const [displayName, setDisplayName] = useState(initial.display_name ?? "");
@@ -57,6 +59,9 @@ export function ProfileEditor({
   });
   const [topicBusy, setTopicBusy] = useState(false);
   const [topicError, setTopicError] = useState<string | null>(null);
+  const [photoIds, setPhotoIds] = useState(initialPhotoIds);
+  const [photoBusy, setPhotoBusy] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [saving, startSave] = useTransition();
@@ -93,6 +98,61 @@ export function ProfileEditor({
       router.replace("/auth");
       router.refresh();
     });
+  }
+
+  async function uploadPhoto(file: File) {
+    setPhotoError(null);
+    if (!file.type.startsWith("image/")) {
+      setPhotoError("Pick an image.");
+      return;
+    }
+    setPhotoBusy("__upload__");
+    try {
+      const data_b64 = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onerror = () => reject(r.error);
+        r.onload = () => {
+          const out = typeof r.result === "string" ? r.result : "";
+          resolve(out);
+        };
+        r.readAsDataURL(file);
+      });
+      const res = await fetch("/api/profile/photos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data_b64, content_type: file.type }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setPhotoError(data?.error ?? `Upload failed (${res.status}).`);
+        return;
+      }
+      const data = (await res.json()) as { photo_id: string };
+      setPhotoIds((ids) => [...ids, data.photo_id]);
+      router.refresh();
+    } finally {
+      setPhotoBusy(null);
+    }
+  }
+
+  async function deletePhoto(photoId: string) {
+    setPhotoError(null);
+    setPhotoBusy(photoId);
+    try {
+      const res = await fetch(
+        `/api/profile/photos/${encodeURIComponent(photoId)}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setPhotoError(data?.error ?? `Remove failed (${res.status}).`);
+        return;
+      }
+      setPhotoIds((ids) => ids.filter((id) => id !== photoId));
+      router.refresh();
+    } finally {
+      setPhotoBusy(null);
+    }
   }
 
   async function addTopic(e: React.FormEvent) {
@@ -247,6 +307,61 @@ export function ProfileEditor({
 
   return (
     <section className="space-y-6 px-4 py-6">
+      <div>
+        <ul className="grid grid-cols-3 gap-2">
+          {photoIds.map((id, i) => (
+            <li
+              key={id}
+              className="relative aspect-square overflow-hidden rounded-2xl bg-[color:var(--muted)]"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/photos/${encodeURIComponent(id)}`}
+                alt={i === 0 ? "Your main photo" : `Your photo ${i + 1}`}
+                className="h-full w-full object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => deletePhoto(id)}
+                disabled={photoBusy === id}
+                aria-label="Remove photo"
+                className="absolute right-1.5 top-1.5 rounded-full bg-black/60 px-2 py-0.5 text-xs text-white backdrop-blur disabled:opacity-50"
+              >
+                ×
+              </button>
+            </li>
+          ))}
+          {photoIds.length < 6 ? (
+            <li className="aspect-square">
+              <label
+                className={cn(
+                  "flex h-full w-full cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-[color:var(--border)] text-2xl text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]",
+                  photoBusy === "__upload__" && "opacity-50",
+                )}
+              >
+                {photoBusy === "__upload__" ? "…" : "+"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  disabled={photoBusy !== null}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) uploadPhoto(file);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </li>
+          ) : null}
+        </ul>
+        {photoError ? (
+          <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+            {photoError}
+          </p>
+        ) : null}
+      </div>
+
       <form onSubmit={save} className="space-y-4">
         <Field label="Display name">
           <input

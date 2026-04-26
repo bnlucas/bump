@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ScreenHeader } from "@/components/screen-header";
+import { Avatar } from "@/components/avatar";
 import { currentSession } from "@/lib/auth/session";
 import { listConversations } from "@/lib/match";
 
@@ -28,9 +29,14 @@ export default async function ChatPage() {
               <li key={c.stream_id}>
                 <Link
                   href={`/chat/${encodeURIComponent(c.stream_id)}`}
-                  className="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-[color:var(--muted)]"
+                  className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[color:var(--muted)]"
                 >
-                  <div className="min-w-0">
+                  <Avatar
+                    photoId={c.primary_photo_id}
+                    name={c.display_name}
+                    size={44}
+                  />
+                  <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">
                       {c.display_name ?? "Someone you matched with"}
                     </p>

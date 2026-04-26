@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { currentSession } from "@/lib/auth/session";
+import { Avatar } from "@/components/avatar";
 import { heraldAdmin } from "@/lib/herald-admin";
 import { mintHeraldToken } from "@/lib/herald-token";
 import { messagingAllowed, userBasic } from "@/lib/match";
@@ -27,14 +28,19 @@ export default async function ChatStreamPage({
 
   const counterpartId =
     members.find((m) => m.user_id !== session.externalId)?.user_id ?? null;
-  const counterpartName = counterpartId
-    ? ((await userBasic(counterpartId))?.display_name ?? FALLBACK_NAME)
-    : FALLBACK_NAME;
+  const counterpart = counterpartId ? await userBasic(counterpartId) : null;
+  const counterpartName = counterpart?.display_name ?? FALLBACK_NAME;
+  const counterpartPhotoId = counterpart?.primary_photo_id ?? null;
 
   if (counterpartId) {
     const permission = await messagingAllowed(session.externalId, counterpartId);
     if (!permission.allowed) {
-      return <PermissionDenied counterpartName={counterpartName} />;
+      return (
+        <PermissionDenied
+          counterpartName={counterpartName}
+          counterpartPhotoId={counterpartPhotoId}
+        />
+      );
     }
   }
 
@@ -42,13 +48,19 @@ export default async function ChatStreamPage({
 
   return (
     <div className="flex h-dvh flex-col">
-      <ChatHeader title={counterpartName} />
+      <ChatHeader title={counterpartName} photoId={counterpartPhotoId} />
       <ChatRoom creds={creds} streamId={streamId} />
     </div>
   );
 }
 
-function ChatHeader({ title }: { title: string }) {
+function ChatHeader({
+  title,
+  photoId,
+}: {
+  title: string;
+  photoId: string | null;
+}) {
   return (
     <header
       className="flex items-center gap-3 border-b border-[color:var(--border)] bg-[color:var(--background)] px-4"
@@ -61,15 +73,22 @@ function ChatHeader({ title }: { title: string }) {
       >
         ‹
       </Link>
+      <Avatar photoId={photoId} name={title} size={36} />
       <h1 className="min-w-0 truncate text-base font-semibold">{title}</h1>
     </header>
   );
 }
 
-function PermissionDenied({ counterpartName }: { counterpartName: string }) {
+function PermissionDenied({
+  counterpartName,
+  counterpartPhotoId,
+}: {
+  counterpartName: string;
+  counterpartPhotoId: string | null;
+}) {
   return (
     <div className="flex min-h-dvh flex-col">
-      <ChatHeader title={counterpartName} />
+      <ChatHeader title={counterpartName} photoId={counterpartPhotoId} />
       <section className="flex flex-1 items-center justify-center px-6 text-center">
         <p className="text-sm text-[color:var(--muted-foreground)]">
           You can&rsquo;t message here right now.

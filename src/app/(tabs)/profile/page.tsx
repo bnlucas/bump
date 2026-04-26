@@ -5,6 +5,7 @@ import { loadProfile } from "@/lib/profile";
 import { listConsentLayers, listConsents } from "@/lib/consents";
 import { listVocabTags, listVocabTopics } from "@/lib/vocab";
 import { listAffinityPreferences, listAffinityRoles } from "@/lib/affinity-config";
+import { listPhotoIds } from "@/lib/photos";
 import { ProfileEditor } from "./profile-editor";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export default async function ProfilePage() {
   const session = await currentSession();
   if (!session) redirect("/auth");
 
-  const [profile, granted, layers, vocab, topicVocab, preferences, roles] =
+  const [profile, granted, layers, vocab, topicVocab, preferences, roles, photoIds] =
     await Promise.all([
       loadProfile(session.externalId),
       listConsents(session.externalId),
@@ -22,6 +23,7 @@ export default async function ProfilePage() {
       listVocabTopics(),
       listAffinityPreferences(),
       listAffinityRoles(),
+      listPhotoIds(session.externalId),
     ]);
 
   return (
@@ -35,6 +37,7 @@ export default async function ProfilePage() {
         topicVocab={topicVocab}
         preferences={preferences}
         roles={roles}
+        initialPhotoIds={photoIds}
       />
     </>
   );

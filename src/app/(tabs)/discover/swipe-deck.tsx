@@ -103,20 +103,32 @@ export function SwipeDeck({
         </div>
       ) : (
         <>
-          <article className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--muted)] p-6 shadow-sm">
-            <h2 className="text-xl font-semibold tracking-tight">
-              {top.display_name ?? "Someone interesting"}
-            </h2>
-            {top.bio ? (
-              <p className="mt-3 whitespace-pre-line text-sm">{top.bio}</p>
-            ) : null}
-            {top.explanation.length > 0 ? (
-              <ul className="mt-4 space-y-1 text-xs text-[color:var(--muted-foreground)]">
-                {top.explanation.slice(0, 3).map((e, i) => (
-                  <li key={i}>{e}</li>
-                ))}
-              </ul>
-            ) : null}
+          <article className="overflow-hidden rounded-3xl border border-[color:var(--border)] bg-[color:var(--muted)] shadow-sm">
+            {top.primary_photo_id ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={`/api/photos/${encodeURIComponent(top.primary_photo_id)}`}
+                alt={top.display_name ?? "Photo"}
+                className="aspect-[4/5] w-full object-cover"
+              />
+            ) : (
+              <div className="aspect-[4/5] w-full bg-gradient-to-br from-[color:var(--muted)] to-[color:var(--border)]" />
+            )}
+            <div className="p-5">
+              <h2 className="text-xl font-semibold tracking-tight">
+                {top.display_name ?? "Someone interesting"}
+              </h2>
+              {top.bio ? (
+                <p className="mt-3 whitespace-pre-line text-sm">{top.bio}</p>
+              ) : null}
+              {top.explanation.length > 0 ? (
+                <ul className="mt-4 space-y-1 text-xs text-[color:var(--muted-foreground)]">
+                  {top.explanation.slice(0, 3).map((e, i) => (
+                    <li key={i}>{e}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
           </article>
 
           {error ? (

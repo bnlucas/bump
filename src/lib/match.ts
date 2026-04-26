@@ -16,6 +16,7 @@ export interface Candidate {
   external_id: string;
   display_name: string | null;
   bio: string | null;
+  primary_photo_id: string | null;
   score: number;
   explanation: string[];
 }
@@ -31,6 +32,7 @@ export interface ConversationSummary {
   stream_id: string;
   counterpart_id: string;
   display_name: string | null;
+  primary_photo_id: string | null;
   score: number;
   matched_at: string;
 }
@@ -69,6 +71,13 @@ export async function loadCandidates(
   return Promise.all(matches.slice(0, limit).map(hydrateCandidate));
 }
 
+function readPrimaryPhotoId(traits: Record<string, unknown>): string | null {
+  const ids = traits.photo_ids;
+  if (!Array.isArray(ids)) return null;
+  const first = ids.find((v): v is string => typeof v === "string");
+  return first ?? null;
+}
+
 async function hydrateCandidate(m: MatchDto): Promise<Candidate> {
   const targetId = m.matched_user_id;
   const [envelope, userRes] = await Promise.all([
@@ -83,6 +92,7 @@ async function hydrateCandidate(m: MatchDto): Promise<Candidate> {
     external_id: targetId,
     display_name: typeof fields.display_name === "string" ? fields.display_name : null,
     bio: typeof traits.bio === "string" ? traits.bio : null,
+    primary_photo_id: readPrimaryPhotoId(traits),
     score: m.score,
     explanation: m.explanation ?? [],
   };
@@ -172,15 +182,20 @@ export async function listConversations(
     matches.map(async (m) => {
       const permission = await messagingAllowed(meId, m.matched_user_id);
       if (!permission.allowed) return null;
-      const envelope = await sigil()
-        .userGet(SIGIL_USER_SCHEMA, m.matched_user_id)
-        .catch(() => null);
+      const [envelope, userRes] = await Promise.all([
+        sigil().userGet(SIGIL_USER_SCHEMA, m.matched_user_id).catch(() => null),
+        simbee().fetch.GET("/api/v1/users/{external_id}", {
+          params: { path: { external_id: m.matched_user_id } },
+        }),
+      ]);
       const fields = (envelope?.fields ?? {}) as Record<string, unknown>;
+      const traits = (userRes.data?.data?.traits ?? {}) as Record<string, unknown>;
       return {
         stream_id: streamIdForPair(meId, m.matched_user_id),
         counterpart_id: m.matched_user_id,
         display_name:
           typeof fields.display_name === "string" ? fields.display_name : null,
+        primary_photo_id: readPrimaryPhotoId(traits),
         score: m.score,
         matched_at: m.matched_at,
       } satisfies ConversationSummary;
@@ -200,6 +215,7 @@ export async function counterpartId(streamId: string, meId: string): Promise<str
 export async function userBasic(externalId: string): Promise<{
   external_id: string;
   display_name: string | null;
+  primary_photo_id: string | null;
 } | null> {
   const userRes = await simbeeRaw<UserEnvelope>(
     `/api/v1/users/${encodeURIComponent(externalId)}`,
@@ -209,8 +225,10 @@ export async function userBasic(externalId: string): Promise<{
     .userGet(SIGIL_USER_SCHEMA, externalId)
     .catch(() => null);
   const fields = (envelope?.fields ?? {}) as Record<string, unknown>;
+  const traits = (userRes.data.data.traits ?? {}) as Record<string, unknown>;
   return {
     external_id: externalId,
     display_name: typeof fields.display_name === "string" ? fields.display_name : null,
+    primary_photo_id: readPrimaryPhotoId(traits),
   };
 }
