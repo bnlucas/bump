@@ -10,7 +10,7 @@ export default async function CommunitiesPage() {
   const session = await currentSession();
   if (!session) redirect("/auth");
 
-  const posts = await listPosts();
+  const posts = await listPosts(session.externalId);
 
   return (
     <>

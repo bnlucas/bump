@@ -8,7 +8,7 @@ export async function GET() {
   const session = await requireSession();
   if (isUnauthorized(session)) return session;
 
-  const posts = await listPosts();
+  const posts = await listPosts(session.externalId);
   return NextResponse.json({ posts });
 }
 

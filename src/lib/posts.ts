@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { simbeeRaw } from "./simbee-raw";
 import { shroudb } from "./shroudb";
 import { sigil, SIGIL_USER_SCHEMA } from "./sigil";
+import { resolveInternalUserId } from "./simbee-user";
 
 const POSTS_NAMESPACE = process.env.SHROUDB_POSTS_NAMESPACE ?? "posts";
 const COMMENTS_NAMESPACE = process.env.SHROUDB_COMMENTS_NAMESPACE ?? "comments";
@@ -79,12 +80,28 @@ export interface PostView {
   body: string;
   published_at: string | null;
   engagements_count: number;
+  current_user_like_engagement_id: string | null;
 }
 
-async function hydrate(item: ContentItemDto): Promise<PostView | null> {
-  const [body, envelope] = await Promise.all([
+async function findUserLike(
+  contentId: string,
+  internalUserId: string,
+): Promise<string | null> {
+  const res = await simbeeRaw<ListEnvelope<EngagementDto>>(
+    `/api/v1/content/${encodeURIComponent(contentId)}/engagements?type=${encodeURIComponent(SIGNAL_KEY_LIKE)}`,
+  );
+  if (!res.ok) return null;
+  return (res.data?.data ?? []).find((e) => e.user_id === internalUserId)?.id ?? null;
+}
+
+async function hydrate(
+  item: ContentItemDto,
+  viewerInternalId: string | null,
+): Promise<PostView | null> {
+  const [body, envelope, likeEngagementId] = await Promise.all([
     readBody(item.external_id),
     sigil().userGet(SIGIL_USER_SCHEMA, item.author_id).catch(() => null),
+    viewerInternalId ? findUserLike(item.id, viewerInternalId) : Promise.resolve(null),
   ]);
   if (!body) return null;
   const fields = (envelope?.fields ?? {}) as Record<string, unknown>;
@@ -97,16 +114,23 @@ async function hydrate(item: ContentItemDto): Promise<PostView | null> {
     body: body.body,
     published_at: item.published_at ?? null,
     engagements_count: item.engagements_count ?? 0,
+    current_user_like_engagement_id: likeEngagementId,
   };
 }
 
-export async function listPosts(limit = 20): Promise<PostView[]> {
-  const res = await simbeeRaw<ListEnvelope<ContentItemDto>>(
-    `/api/v1/content?limit=${limit}&content_type=${encodeURIComponent(POST_CONTENT_TYPE)}`,
-  );
+export async function listPosts(
+  viewerExternalId: string | null = null,
+  limit = 20,
+): Promise<PostView[]> {
+  const [res, viewerInternalId] = await Promise.all([
+    simbeeRaw<ListEnvelope<ContentItemDto>>(
+      `/api/v1/content?limit=${limit}&content_type=${encodeURIComponent(POST_CONTENT_TYPE)}`,
+    ),
+    viewerExternalId ? resolveInternalUserId(viewerExternalId) : Promise.resolve(null),
+  ]);
   if (!res.ok) return [];
   const items = res.data?.data ?? [];
-  const hydrated = await Promise.all(items.map(hydrate));
+  const hydrated = await Promise.all(items.map((i) => hydrate(i, viewerInternalId)));
   return hydrated.filter((p): p is PostView => p !== null);
 }
 
@@ -139,7 +163,8 @@ export async function createPost(
     await shroudb().shroudb.delete(POSTS_NAMESPACE, externalId).catch(() => {});
     return null;
   }
-  return hydrate(res.data.data);
+  // The post we just created can't have a like yet; skip the lookup.
+  return hydrate(res.data.data, null);
 }
 
 export interface LikeResult {

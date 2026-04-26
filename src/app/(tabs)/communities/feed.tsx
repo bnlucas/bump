@@ -122,7 +122,9 @@ export function CommunityFeed({
 }
 
 function PostCard({ post }: { post: PostView }) {
-  const [likedEngagementId, setLikedEngagementId] = useState<string | null>(null);
+  const [likedEngagementId, setLikedEngagementId] = useState<string | null>(
+    post.current_user_like_engagement_id,
+  );
   const [likeDelta, setLikeDelta] = useState(0);
   const [likeBusy, setLikeBusy] = useState(false);
 
